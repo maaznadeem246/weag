@@ -1,0 +1,95 @@
+[project]
+name = "weag-green-agent"
+version = "0.1.0"
+description = "BrowserGym Green Agent for AgentBeats - evaluates web agents with computational efficiency mandates (C, L, F)"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    {name = "WEAG Team"}
+]
+keywords = ["agentbeats", "browsergym", "green-agent", "mcp", "a2a", "web-evaluation"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # A2A and AgentBeats
+    "a2a-sdk[http-server]>=0.3.20",
+    "uvicorn>=0.38.0",
+    "pydantic>=2.12.5",
+    # BrowserGym and web automation
+    "browsergym-core>=0.1.0",
+    "browsergym-miniwob>=0.14.2",
+    "gymnasium>=0.29.0",
+    "playwright>=1.40.0",
+    # MCP server
+    "mcp>=1.0.0",
+    # LLM and tracing
+    "python-dotenv>=1.1.1",
+    "openai>=1.0.0",
+    "langfuse>=2.0.0",
+    "openinference-instrumentation-openai-agents>=0.1.0",
+    "openai-agents[litellm]>=0.6.4",
+    "sqlalchemy>=2.0.0",
+    # Computational efficiency tools
+    "psutil>=5.9.0",
+    "tiktoken>=0.5.0",
+    "prometheus-client>=0.19.0",
+    # HTTP server and health endpoints
+    "fastapi>=0.100.0",
+    # Development tools
+    "docstring-parser>=0.17.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=7.0.0",
+    "httpx>=0.28.1",
+]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "types-psutil",
+]
+# Docker deployment includes all benchmarks
+docker = [
+    "browsergym>=0.1.0",
+    "browsergym-miniwob>=0.1.0",
+    "browsergym-assistantbench>=0.1.0",
+    "weblinx-browsergym>=0.0.2",
+    # "browsergym-webarena>=0.1.0",
+    # "browsergym-visualwebarena>=0.1.0",
+    # "browsergym-workarena>=0.1.0",
+]
+# Minimal Docker deployment for faster builds (only miniwob + assistantbench)
+docker-minimal = [
+    "browsergym-miniwob>=0.1.0",
+    "browsergym-assistantbench>=0.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

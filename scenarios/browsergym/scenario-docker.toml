@@ -1,0 +1,133 @@
+# Docker Scenario for kickstart_assessment.py
+# Use this when running with Docker containers (no local process spawning)
+#
+# ⚠️  CONFIGURATION POLICY:
+#     - API keys and secrets: .env file ONLY (never commit to git)
+#     - All other settings: THIS TOML file
+#     - Runtime overrides: CLI flags (--task, --visible, --log-level, etc.)
+#
+# USAGE:
+#   .\docker-test.ps1 -Start                           # Start containers first
+#   python kickstart_assessment.py --scenario scenarios/browsergym/scenario-docker.toml --task miniwob.click-test
+#   python kickstart_assessment.py --scenario scenarios/browsergym/scenario-docker.toml --visible  # Override headless
+#
+# This config connects to existing Docker containers instead of spawning processes
+
+# =============================================================================
+# CONFIGURATION - All assessment settings centralized here
+# =============================================================================
+[config]
+# Domain-specific settings
+domain = "browsergym"  # benchmark domain: browsergym, airline, etc.
+
+# Assessment execution settings
+timeout_seconds = 120  # Default timeout for the whole assessment run (seconds)
+max_steps = 10  # Default max steps per task (passed to Green Agent)
+max_tasks_per_benchmark = 2  # Default max tasks per benchmark
+headless = true  # Browser visibility (false = visible, true = headless)
+
+# Optional: Override max tasks for all benchmarks
+# num_tasks = 3
+
+# =============================================================================
+# GREEN AGENT (Evaluator) - Docker Container Configuration
+# =============================================================================
+[green_agent]
+# AgentBeats platform registration ID (for GitHub Actions deployment)
+agentbeats_id = ""  # Your green agent ID from AgentBeats
+
+# Docker container endpoint (exposed on localhost)
+endpoint = "http://localhost:9009"
+# NO 'cmd' field - connects to existing Docker container on port 9009
+
+# Environment variables - API keys injected from .env or GitHub Actions secrets
+# Use ${VAR_NAME} syntax for dynamic injection (GitHub Actions, CI/CD)
+env = {
+    GREEN_LLM_PROVIDER = "openai",
+    GREEN_OPENAI_MODEL = "gpt-4o",
+    GREEN_OPENAI_API_KEY = "${OPENAI_API_KEY}",
+    # GREEN_GEMINI_API_KEY = "${GEMINI_API_KEY}",
+    # GREEN_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}",
+    # LANGFUSE_PUBLIC_KEY = "${LANGFUSE_PUBLIC_KEY}",
+    # LANGFUSE_SECRET_KEY = "${LANGFUSE_SECRET_KEY}",
+}
+
+# =============================================================================
+# PURPLE AGENT (Participant) - Docker Container
+# =============================================================================
+[[participants]]
+# AgentBeats platform registration ID (for GitHub Actions deployment)
+agentbeats_id = ""  # Your purple agent ID from AgentBeats
+name = "purple_agent"
+role = "purple_agent"
+
+# Docker container endpoint (internal Docker network)
+endpoint = "http://purple-agent:9010/"
+# NO 'cmd' field - connects to existing Docker container on port 9010
+
+# Environment variables - API keys injected from .env or GitHub Actions secrets
+# Use ${VAR_NAME} syntax for dynamic injection (GitHub Actions, CI/CD)
+env = {
+    PURPLE_LLM_PROVIDER = "openai",
+    PURPLE_OPENAI_MODEL = "gpt-4o",
+    PURPLE_OPENAI_API_KEY = "${OPENAI_API_KEY}",
+    # PURPLE_GEMINI_API_KEY = "${GEMINI_API_KEY}",
+    # PURPLE_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}",
+    # LANGFUSE_PUBLIC_KEY = "${LANGFUSE_PUBLIC_KEY}",
+    # LANGFUSE_SECRET_KEY = "${LANGFUSE_SECRET_KEY}",
+}
+
+# =============================================================================
+# BENCHMARKS CONFIGURATION
+# =============================================================================
+# Each [[benchmarks]] section defines a benchmark to evaluate.
+# 
+# Options:
+#   id        - Benchmark identifier (miniwob, assistantbench, webarena, etc.)
+#   max_tasks - Max tasks to run for THIS benchmark (overrides global max_tasks_per_benchmark)
+#   tasks     - OPTIONAL explicit task list. If OMITTED, auto-discovers available tasks!
+#
+# AUTO-DISCOVERY MODE (RECOMMENDED):
+#   Simply omit the `tasks` line - system will find all available tasks and limit by max_tasks
+#
+# SUPPORTED BENCHMARKS:
+#   - miniwob: Requires local dataset at benchmarks/miniwob/html/miniwob/
+#   - assistantbench: Auto-downloads from HuggingFace (no setup needed)
+#   - webarena: Requires Docker containers (WA_* env vars)
+#   - visualwebarena: Requires Docker containers (VWA_* env vars)
+#   - workarena: Requires ServiceNow dev instance (WORKARENA_* env vars)
+#   - weblinx: Requires dataset download (WEBLINX_DATA_PATH env var)
+
+# MiniWoB - Local HTML tasks (ready to use)
+# [[benchmarks]]
+# id = "miniwob"
+# Uses global max_tasks_per_benchmark
+
+# AssistantBench - HuggingFace tasks (ready to use)
+# [[benchmarks]]
+# id = "assistantbench"
+
+# WebArena - Requires Docker setup (comment out if not available)
+# [[benchmarks]]
+# id = "webarena"
+# max_tasks = 3
+
+# VisualWebArena - Requires Docker setup (comment out if not available)
+# [[benchmarks]]
+# id = "visualwebarena"
+# max_tasks = 3
+
+# WorkArena - Requires ServiceNow instance (comment out if not available)
+# [[benchmarks]]
+# id = "workarena"
+# max_tasks = 3
+
+# WebLINX - Requires dataset download (comment out if not available)
+# [[benchmarks]]
+# id = "weblinx"
+# max_tasks = 3
+
+# EXPLICIT MODE EXAMPLE (uncomment to use specific tasks):
+# [[benchmarks]]
+# id = "miniwob"
+# tasks = ["click-test", "ascending-numbers", "book-flight"]

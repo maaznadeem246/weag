@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.pyenv/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vscode-test/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.cover
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright browsers
+.cache/ms-playwright/
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+
+# Docker
+*.tar
+
+# Backup files
+*.backup
+*.bak
+
+

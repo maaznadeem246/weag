@@ -1,0 +1,66 @@
+[project]
+name = "weag-purple-agent"
+version = "0.1.0"
+description = "Baseline Purple Agent for BrowserGym evaluation - demonstrates web task automation"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    {name = "WEAG Team"}
+]
+keywords = ["agentbeats", "purple-agent", "a2a", "web-automation", "mcp-client"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # A2A and AgentBeats
+    "a2a-sdk[http-server]>=0.3.20",
+    "uvicorn>=0.38.0",
+    "pydantic>=2.12.5",
+    # MCP client
+    "mcp>=1.0.0",
+    # LLM and tracing
+    "python-dotenv>=1.1.1",
+    "openai>=1.0.0",
+    "openai-agents[litellm]>=0.6.4",
+    "langfuse>=2.0.0",
+    "openinference-instrumentation-openai-agents>=0.1.0",
+    # HTTP client
+    "httpx>=0.28.1",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.28.1",
+]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

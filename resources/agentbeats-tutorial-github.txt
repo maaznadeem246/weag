@@ -1,0 +1,2213 @@
+Directory structure:
+└── agentbeats-tutorial/
+    ├── README.md
+    ├── Dockerfile.client_cli
+    ├── pyproject.toml
+    ├── sample.env
+    ├── .dockerignore
+    ├── scenarios/
+    │   ├── debate/
+    │   │   ├── adk_debate_judge.py
+    │   │   ├── debate_judge.py
+    │   │   ├── debate_judge_common.py
+    │   │   ├── debater.py
+    │   │   ├── Dockerfile.adk-debate-judge
+    │   │   ├── Dockerfile.debate-judge
+    │   │   ├── Dockerfile.debater
+    │   │   └── scenario.toml
+    │   └── tau2/
+    │       ├── Dockerfile.tau2-agent
+    │       ├── Dockerfile.tau2-evaluator
+    │       ├── scenario.toml
+    │       ├── tau2_agent.py
+    │       └── tau2_evaluator.py
+    ├── src/
+    │   └── agentbeats/
+    │       ├── __init__.py
+    │       ├── client.py
+    │       ├── client_cli.py
+    │       ├── cloudflare.py
+    │       ├── green_executor.py
+    │       ├── models.py
+    │       ├── run_scenario.py
+    │       └── tool_provider.py
+    └── .github/
+        └── workflows/
+            └── publish.yml
+
+================================================
+FILE: README.md
+================================================
+## Quickstart
+1. Clone the repo
+```
+git clone git@github.com:agentbeats/tutorial.git agentbeats-tutorial
+cd agentbeats-tutorial
+```
+2. Install dependencies
+```
+uv sync
+```
+3. Set environment variables
+```
+cp sample.env .env
+```
+Add your Google API key to the .env file
+
+4. Run the [debate example](#example)
+```
+uv run agentbeats-run scenarios/debate/scenario.toml
+```
+This command will:
+- Start the agent servers using the commands specified in scenario.toml
+- Construct an `assessment_request` message containing the participant's role-endpoint mapping and the assessment config
+- Send the `assessment_request` to the green agent and print streamed responses
+
+**Note:** Use `--show-logs` to see agent outputs during the assessment, and `--serve-only` to start agents without running the assessment.
+
+To run this example manually, start the agent servers in separate terminals, and then in another terminal run the A2A client on the scenario.toml file to initiate the assessment.
+
+After running, you should see an output similar to this.
+
+![Sample output](assets/sample_output.png)
+
+## Project Structure
+```
+src/
+└─ agentbeats/
+   ├─ green_executor.py        # base A2A green agent executor
+   ├─ models.py                # pydantic models for green agent IO
+   ├─ client.py                # A2A messaging helpers
+   ├─ client_cli.py            # CLI client to start assessment
+   └─ run_scenario.py          # run agents and start assessment
+
+scenarios/
+└─ debate/                     # implementation of the debate example
+   ├─ debate_judge.py          # green agent impl using the official A2A SDK
+   ├─ adk_debate_judge.py      # alternative green agent impl using Google ADK
+   ├─ debate_judge_common.py   # models and utils shared by above impls
+   ├─ debater.py               # debater agent (Google ADK)
+   └─ scenario.toml            # config for the debate example
+```
+
+# AgentBeats Tutorial
+Welcome to the AgentBeats Tutorial! 🤖🎵
+
+AgentBeats is an open platform for **standardized and reproducible agent evaluations** and research.
+
+This tutorial is designed to help you get started, whether you are:
+- 🔬 **Researcher** → running controlled experiments and publishing reproducible results
+- 🛠️ **Builder** → developing new agents and testing them against benchmarks
+- 📊 **Evaluator** → designing benchmarks, scenarios, or games to measure agent performance
+- ✨ **Enthusiast** → exploring agent behavior, running experiments, and learning by tinkering
+
+By the end, you’ll understand:
+- The core concepts behind AgentBeats - green agents, purple agents, and A2A assessments
+- How to run existing evaluations on the platform via the web UI
+- How to build and test your own agents locally
+- Share your agents and evaluation results with the community
+
+This guide will help you quickly get started with AgentBeats and contribute to a growing ecosystem of open agent benchmarks.
+
+## Core Concepts
+**Green agents** orchestrate and manage evaluations of one or more purple agents by providing an evaluation harness.
+A green agent may implement a single-player benchmark or a multi-player game where agents compete or collaborate. It sets the rules of the game, hosts the match and decides results.
+
+**Purple agents** are the participants being evaluated. They possess certain skills (e.g. computer use) that green agents evaluate. In security-themed games, agents are often referred to as red and blue (attackers and defenders).
+
+An **assessment** is a single evaluation session hosted by a green agent and involving one or more purple agents. Purple agents demonstrate their skills, and the green agent evaluates and reports results.
+
+All agents communicate via the **A2A protocol**, ensuring compatibility with the open standard for agent interoperability. Learn more about A2A [here](https://a2a-protocol.org/latest/).
+
+## Agent Development
+In this section, you will learn how to:
+- Develop purple agents (participants) and green agents (evaluators)
+- Use common patterns and best practices for building agents
+- Run assessments locally during development
+
+### General Principles
+You are welcome to develop agents using **any programming language, framework, or SDK** of your choice, as long as you expose your agent as an **A2A server**. This ensures compatibility with other agents and benchmarks on the platform. For example, you can implement your agent from scratch using the official [A2A SDK](https://a2a-protocol.org/latest/sdk/), or use a downstream SDK such as [Google ADK](https://google.github.io/adk-docs/).
+
+#### Assessment Flow
+At the beginning of an assessment, the green agent receives an A2A message containing the assessment request:
+```json
+{
+    "participants": { "<role>": "<endpoint_url>" },
+    "config": {}
+}
+```
+- `participants`: a mapping of role names to A2A endpoint URLs for each agent in the assessment
+- `config`: assessment-specific configuration
+
+The green agent then creates a new A2A task and uses the A2A protocol to interact with participants and orchestrate the assessment. During the orchestration, the green agent produces A2A task updates (logs) so that the assessment can be tracked. After the orchestration, the green agent evaluates purple agent performance and produces A2A artifacts with the assessment results. The results must be valid JSON, but the structure is freeform and depends on what the assessment measures.
+
+#### Assessment Patterns
+Below are some common patterns to help guide your assessment design.
+
+- **Artifact submission**: The purple agent produces artifacts (e.g. a trace, code, or research report) and sends them to the green agent for assessment.
+- **Traced environment**: The green agent provides a traced environment (e.g. via MCP, SSH, or a hosted website) and observes the purple agent's actions for scoring.
+- **Message-based assessment**: The green agent evaluates purple agents based on simple message exchanges (e.g. question answering, dialogue, or reasoning tasks).
+- **Multi-agent games**: The green agent orchestrates interactions between multiple purple agents, such as security games, negotiation games, social deduction games, etc.
+
+#### Reproducibility
+To ensure reproducibility, your agents (including their tools and environments) must join each assessment with a fresh state.
+
+### Example
+To make things concrete, we will use a debate scenario as our toy example:
+- Green agent (`DebateJudge`) orchestrates a debate between two agents by using an A2A client to alternate turns between participants. Each participant's response is forwarded to the caller as a task update. After the orchestration, it applies an LLM-as-Judge technique to evaluate which debater performed better and finally produces an artifact with the results.
+- Two purple agents (`Debater`) participate by presenting arguments for their side of the topic.
+
+To run this example, we start all three servers and then use an A2A client to send an `assessment_request` to the green agent and observe its outputs.
+The full example code is given in the template repository. Follow the quickstart guide to setup the project and run the example.
+
+### Dockerizing Agent
+
+AgentBeats uses Docker to reproducibly run assessments on GitHub runners. Your agent needs to be packaged as a Docker image and published to the GitHub Container Registry.
+
+**How AgentBeats runs your image**  
+Your image must define an [`ENTRYPOINT`](https://docs.docker.com/reference/dockerfile/#entrypoint) that starts your agent server and accepts the following arguments:
+- `--host`: host address to bind to
+- `--port`: port to listen on
+- `--card-url`: the URL to advertise in the agent card
+
+**Build and publish steps**
+1. Create a Dockerfile for your agent. See example [Dockerfiles](./scenarios/debate).
+2. Build the image
+```bash
+docker build --platform linux/amd64 -t ghcr.io/yourusername/your-agent:v1.0 .
+```
+**⚠️ Important**: Always build for `linux/amd64` architecture as that is used by GitHub Actions.
+
+3. Push to GitHub Container Registry
+```bash
+docker push ghcr.io/yourusername/your-agent:v1.0
+```
+
+We recommend setting up a GitHub Actions [workflow](.github/workflows/publish.yml) to automatically build and publish your agent images.
+
+## Best Practices 💡
+
+Developing robust and efficient agents requires more than just writing code. Here are some best practices to follow when building for the AgentBeats platform, covering security, performance, and reproducibility.
+
+### API Keys and Cost Management
+
+AgentBeats uses a Bring-Your-Own-Key (BYOK) model. This gives you maximum flexibility to use any LLM provider, but also means you are responsible for securing your keys and managing costs.
+
+-   **Security**: You provide your API keys directly to the agents running on your own infrastructure. Never expose your keys in client-side code or commit them to public repositories. Use environment variables (like in the tutorial's `.env` file) to manage them securely.
+
+-   **Cost Control**: If you publish a public agent, it could become popular unexpectedly. To prevent surprise bills, it's crucial to set spending limits and alerts on your API keys or cloud account. For example, if you're only using an API for a single agent on AgentBeats, a limit of $10 with an alert at $5 might be a safe starting point.
+
+#### Getting Started with Low Costs
+If you are just getting started and want to minimize costs, many services offer generous free tiers.
+-   **Google Gemini**: Often has a substantial free tier for API access.
+-   **OpenRouter**: Provides free credits upon signup and can route requests to many different models, including free ones.
+-   **Local LLMs**: If you run agents on your own hardware, you can use a local LLM provider like [Ollama](https://ollama.com/) to avoid API costs entirely.
+
+#### Provider-Specific Guides
+-   **OpenAI**:
+    -   Finding your key: [Where do I find my OpenAI API key?](https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key)
+    -   Setting limits: [Usage limits](https://platform.openai.com/settings/organization/limits)
+
+-   **Anthropic (Claude)**:
+    -   Getting started: [API Guide](https://docs.anthropic.com/claude/reference/getting-started-with-the-api)
+    -   Setting limits: [Spending limits](https://console.anthropic.com/settings/limits)
+
+-   **Google Gemini**:
+    -   Finding your key: [Get an API key](https://ai.google.dev/gemini-api/docs/api-key)
+    -   Setting limits requires using Google Cloud's billing and budget features. Be sure to set up [billing alerts](https://cloud.google.com/billing/docs/how-to/budgets).
+
+-   **OpenRouter**:
+    -   Request a key from your profile page under "Keys".
+    -   You can set a spending limit directly in the key creation flow. This limit aggregates spend across all models accessed via that key.
+
+### Efficient & Reliable Assessments
+
+#### Communication
+Agents in an assessment often run on different machines across the world. They communicate over the internet, which introduces latency.
+
+-   **Minimize Chattiness**: Design interactions to be meaningful and infrequent. Avoid back-and-forth for trivial information.
+-   **Set Timeouts**: A single unresponsive agent can stall an entire assessment. Your A2A SDK may handle timeouts, but it's good practice to be aware of them and configure them appropriately.
+-   **Compute Close to Data**: If an agent needs to process a large dataset or file, it should download that resource and process it locally, rather than streaming it piece by piece through another agent.
+
+#### Division of Responsibilities
+The green and purple agents have distinct roles. Adhering to this separation is key for efficient and scalable assessments, especially over a network.
+
+-   **Green agent**: A lightweight verifier or orchestrator. Its main job is to set up the scenario, provide context to purple agents, and evaluate the final result. It should not perform heavy computation.
+-   **Purple agent**: The workhorse. It performs the core task, which may involve complex computation, running tools, or long-running processes.
+
+Here's an example for a security benchmark:
+1.  The **green agent** defines a task (e.g., "find a vulnerability in this codebase") and sends the repository URL to the purple agent.
+2.  The **purple agent** clones the code, runs its static analysis tools, fuzzers, and other agentic processes. This could take a long time and consume significant resources.
+3.  Once it finds a vulnerability, the **purple agent** sends back a concise report: the steps to reproduce the bug and a proposed patch.
+4.  The **green agent** receives this small payload, runs the reproduction steps, and verifies the result. This final verification step is quick and lightweight.
+
+This structure keeps communication overhead low and makes the assessment efficient.
+
+### Taking Advantage of Platform Features
+AgentBeats is more than just a runner; it's an observability platform. You can make your agent's "thought process" visible to the community and to evaluators.
+
+-   **Emit Traces**: As your agent works through a problem, use A2A `task update` messages to report its progress, current strategy, or intermediate findings. These updates appear in real-time in the web UI and in the console during local development.
+-   **Generate Artifacts**: When your agent produces a meaningful output (like a piece of code, a report, or a log file), save it as an A2A `artifact`. Artifacts are stored with the assessment results and can be examined by anyone viewing the battle.
+
+Rich traces and artifacts are invaluable for debugging, understanding agent behavior, and enabling more sophisticated, automated "meta-evaluations" of agent strategies.
+
+### Assessment Isolation and Reproducibility
+For benchmarks to be fair and meaningful, every assessment run must be independent and reproducible.
+
+-   **Start Fresh**: Each agent should start every assessment from a clean, stateless initial state. Avoid carrying over memory, files, or context from previous battles.
+-   **Isolate Contexts**: The A2A protocol provides a `task_id` for each assessment. Use this ID to namespace any local resources your agent might create, such as temporary files or database entries. This prevents collisions between concurrent assessments.
+-   **Reset State**: If your agent maintains a long-running state, ensure you have a mechanism to reset it completely between assessments.
+
+Following these principles ensures that your agent's performance is measured based on its capability for the task at hand, not on leftover state from a previous run.
+
+## Next Steps
+Now that you’ve completed the tutorial, you’re ready to take the next step with AgentBeats.
+
+- 📊 **Develop new assessments** → Build a green agent along with baseline purple agents. Share your GitHub repo with us and we'll help with hosting and onboarding to the platform.
+- 🏆 **Evaluate your agents** → Create and test agents against existing benchmarks to climb the leaderboards.
+- 🌐 **Join the community** → Connect with researchers, builders, and enthusiasts to exchange ideas, share results, and collaborate on new evaluations.
+
+The more agents and assessments are shared, the richer and more useful the platform becomes. We’re excited to see what you create!
+
+
+
+================================================
+FILE: Dockerfile.client_cli
+================================================
+FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim
+RUN adduser --disabled-password agentbeats
+USER agentbeats
+WORKDIR /app
+COPY --chown=agentbeats pyproject.toml uv.lock README.md ./
+RUN --mount=type=cache,target=/home/agentbeats/.cache/uv,uid=1000 uv sync --frozen --no-dev
+COPY --chown=agentbeats src src
+ENTRYPOINT ["uv", "run", "src/agentbeats/client_cli.py"]
+
+
+
+================================================
+FILE: pyproject.toml
+================================================
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentbeats-tutorial"
+version = "0.1.0"
+description = "Agentbeats Tutorial"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "a2a-sdk>=0.3.5",
+    "google-adk>=1.14.1",
+    "google-genai>=1.36.0",
+    "litellm>=1.0.0",
+    "loguru>=0.7.0",
+    "pydantic>=2.11.9",
+    "python-dotenv>=1.1.1",
+    "uvicorn>=0.35.0",
+]
+
+[project.scripts]
+agentbeats-run = "agentbeats.run_scenario:main"
+
+[tool.uv]
+package = true
+dev-dependencies = [
+    "mypy>=1.18.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentbeats"]
+
+
+
+================================================
+FILE: sample.env
+================================================
+GOOGLE_GENAI_USE_VERTEXAI=FALSE
+GOOGLE_API_KEY=
+
+
+
+================================================
+FILE: .dockerignore
+================================================
+.env
+.DS_Store
+.python-version
+.venv
+**/__pycache__
+**/*.pyc
+
+
+
+================================================
+FILE: scenarios/debate/adk_debate_judge.py
+================================================
+# prompt adapted from InspireScore: https://github.com/fywang12/InspireDebate/blob/main/inspirescore.py
+import argparse
+import uvicorn
+from dotenv import load_dotenv
+load_dotenv()
+
+from google.adk.agents import Agent
+from google.adk.tools import FunctionTool
+from google.adk.a2a.utils.agent_to_a2a import to_a2a
+
+from agentbeats.tool_provider import ToolProvider
+from debate_judge_common import DebateEval, debate_judge_agent_card
+
+
+system_prompt = '''
+You are the green agent, the debate moderator and judge for structured debates between agents.
+
+Participating agents:
+- **pro_debater**: Argues in favor of the topic statement
+- **con_debater**: Argues against the topic statement
+
+Your role is to orchestrate a multi-round debate (facilitate the exchange of arguments), and judge the winner based on the quality of reasoning and evidence.
+
+You will receive a structured input:
+- the URLs used by pro_debater and con_debater - use them to communicate with agents.
+- debate topic
+- number of rounds
+
+Once you receive this, immediately start following instructions below.
+
+### Debate Flow:
+
+1. Orchestrate the debate using the talk_to_agent tool:
+- Opening arguments
+  - Ask the pro debater to present their opening argument on the given topic.
+  - Pass that response to the con debater, asking them to present their opening argument while addressing what the pro debater just said.
+- Remaining rounds
+  - Alternate turns between pro and con debaters.
+  - Each debater is told exactly what their opponent said in the previous turn and asked to respond with their next argument.
+  - Continue this exchange until the specified number of rounds (num_rounds) is reached.
+
+2. After reaching the maximum number of rounds, produce your final response by assessing both sides based on four key criteria: Emotional Appeal, Clarity of Argument and Reasoning, Logical Arrangement of Arguments, and Relevance to Debate Topic.
+For each of the four subdimensions, provide a score from 0 to 1 (with 0 being the lowest and 1 being the highest) for both the **Pro (Affirmative)** side and the **Con (Negative)** side. Additionally, provide a brief analysis for both sides for each subdimension.
+
+Scoring Criteria:
+    1. **Emotional Appeal**
+        - How effectively does each side connect with the audience emotionally? Does the argument evoke empathy, passion, or values?
+        - **0**: No emotional appeal. The argument feels cold or disconnected.
+        - **1**: Highly engaging emotionally, strongly connects with the audience.
+
+    2. **Clarity of Argument and Reasoning**
+        - Are the arguments clearly presented? Is the reasoning sound and easy to follow?
+        - **0**: The arguments are unclear or confusing.
+        - **1**: The arguments are well-structured and easy to understand.
+
+    3. **Logical Arrangement of Arguments**
+        - Is the argument presented in a logical, coherent manner? Does each point flow into the next without confusion?
+        - **0**: The arguments are disorganized and difficult to follow.
+        - **1**: The arguments follow a clear and logical progression.
+
+    4. **Relevance to Debate Topic**
+        - Does each argument directly address the debate topic? Are there any irrelevant points or off-topic distractions?
+        - **0**: Arguments that stray far from the topic.
+        - **1**: Every argument is focused and relevant to the topic.
+
+Please output the result in the following format:
+
+1. **Pro (Affirmative Side) Score**:
+    - Emotional Appeal: [score]
+    - Argument Clarity: [score]
+    - Argument Arrangement: [score]
+    - Relevance to Debate Topic: [score]
+    - **Total Score**: [total score]
+
+2. **Con (Negative Side) Score**:
+    - Emotional Appeal: [score]
+    - Argument Clarity: [score]
+    - Argument Arrangement: [score]
+    - Relevance to Debate Topic: [score]
+    - **Total Score**: [total score]
+
+3. **Winner**: [Pro/Con]
+4. **Reason**: [Provide detailed analysis based on the scores]
+'''
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run the A2A debate judge.")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind the server")
+    parser.add_argument("--port", type=int, default=9009, help="Port to bind the server")
+    parser.add_argument("--card-url", type=str, help="External URL to provide in the agent card")
+    args = parser.parse_args()
+
+    tool_provider = ToolProvider()
+    root_agent = Agent(
+        name="debate_moderator",
+        model="gemini-2.0-flash",
+        description=(
+            "Orchestrate and judge a structured debate between pro and con agents on a given topic with multiple rounds of arguments."
+        ),
+        instruction=system_prompt,
+        tools=[FunctionTool(func=tool_provider.talk_to_agent)],
+        output_schema=DebateEval,
+        after_agent_callback=lambda callback_context: tool_provider.reset()
+    )
+
+    agent_card = debate_judge_agent_card("DebateJudgeADK", args.card_url or f"http://{args.host}:{args.port}/")
+    a2a_app = to_a2a(root_agent, agent_card=agent_card)
+    uvicorn.run(a2a_app, host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+================================================
+FILE: scenarios/debate/debate_judge.py
+================================================
+import argparse
+import contextlib
+import uvicorn
+import asyncio
+import logging
+from dotenv import load_dotenv
+from pydantic import BaseModel
+from typing import Literal
+
+load_dotenv()
+
+from google import genai
+from a2a.server.apps import A2AStarletteApplication
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.server.tasks import TaskUpdater
+from a2a.types import (
+    TaskState,
+    Part,
+    TextPart,
+)
+from a2a.utils import (
+    new_agent_text_message
+)
+
+from agentbeats.green_executor import GreenAgent, GreenExecutor
+from agentbeats.models import EvalRequest, EvalResult
+from agentbeats.tool_provider import ToolProvider
+
+from debate_judge_common import DebateEval, debate_judge_agent_card
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("debate_judge")
+
+
+class DebateJudge(GreenAgent):
+    def __init__(self):
+        self._required_roles = ["pro_debater", "con_debater"]
+        self._required_config_keys = ["topic", "num_rounds"]
+        self._client = genai.Client()
+        self._tool_provider = ToolProvider()
+
+    def validate_request(self, request: EvalRequest) -> tuple[bool, str]:
+        missing_roles = set(self._required_roles) - set(request.participants.keys())
+        if missing_roles:
+            return False, f"Missing roles: {missing_roles}"
+        missing_config_keys = set(self._required_config_keys) - set(request.config.keys())
+        if missing_config_keys:
+            return False, f"Missing config keys: {missing_config_keys}"
+        try:
+            int(request.config["num_rounds"])
+        except Exception as e:
+            return False, f"Can't parse num_rounds: {e}"
+        return True, "ok"
+
+    async def run_eval(self, req: EvalRequest, updater: TaskUpdater) -> None:
+        logger.info(f"Starting debate orchestration: {req}")
+
+        try:
+            debate = await self.orchestrate_debate(req.participants,
+                                                req.config["topic"],
+                                                req.config["num_rounds"],
+                                                updater)
+
+            debate_text = ""
+            for i, (pro, con) in enumerate(zip(debate["pro_debater"], debate["con_debater"]), start=1):
+                debate_text += f"Pro Argument {i}: {pro}\n"
+                debate_text += f"Con Argument {i}: {con}\n"
+
+            await updater.update_status(TaskState.working, new_agent_text_message(f"Debate orchestration finished. Starting evaluation."))
+            logger.info("Debate orchestration finished. Evaluating debate.")
+            debate_eval: DebateEval = await self.judge_debate(req.config["topic"], debate_text)
+            logger.info(f"Debate Evaluation:\n{debate_eval.model_dump_json()}")
+
+            result = EvalResult(winner=debate_eval.winner, detail=debate_eval.model_dump())
+            await updater.add_artifact(
+                parts=[
+                    Part(root=TextPart(text=debate_eval.reason)),
+                    Part(root=TextPart(text=result.model_dump_json())),
+                ],
+                name="Result",
+            )
+        finally:
+            self._tool_provider.reset()
+
+    async def orchestrate_debate(
+        self,
+        participants: dict[str, str],
+        topic: str,
+        num_rounds: int,
+        updater: TaskUpdater,
+    ) -> dict[str, list[str]]:
+        debate: dict[str, list[str]] = {"pro_debater": [], "con_debater": []}
+
+        async def turn(role: str, prompt: str) -> str:
+            response = await self._tool_provider.talk_to_agent(prompt, str(participants[role]), new_conversation=False)
+            logger.info(f"{role}: {response}")
+            debate[role].append(response)
+            await updater.update_status(TaskState.working, new_agent_text_message(f"{role}: {response}"))
+            return response
+
+        # Opening turns
+        response = await turn("pro_debater", f"Debate Topic: {topic}. Present your opening argument.")
+        response = await turn("con_debater", f"Debate Topic: {topic}. Present your opening argument. Your opponent opened with: {response}")
+
+        # Remaining rounds
+        for _ in range(num_rounds - 1):
+            response = await turn("pro_debater", f"Your opponent said: {response}. Present your next argument.")
+            response = await turn("con_debater", f"Your opponent said: {response}. Present your next argument.")
+
+        return debate
+
+    async def judge_debate(self, topic: str, debate_text: str) -> DebateEval:
+        # prompt adapted from InspireScore: https://github.com/fywang12/InspireDebate/blob/main/inspirescore.py
+
+        system_prompt = """
+        You are an experienced debate judge tasked with evaluating debates. For each debate, you will assess both sides based on four key criteria: Emotional Appeal, Clarity of Argument and Reasoning, Logical Arrangement of Arguments, and Relevance to Debate Topic.
+
+        For each of the four subdimensions, provide a score from 0 to 1 (with 0 being the lowest and 1 being the highest) for both the **Pro (Affirmative)** side and the **Con (Negative)** side. Additionally, provide a brief analysis for both sides for each subdimension.
+
+        Scoring Criteria:
+            1. **Emotional Appeal**
+                - How effectively does each side connect with the audience emotionally? Does the argument evoke empathy, passion, or values?
+                - **0**: No emotional appeal. The argument feels cold or disconnected.
+                - **1**: Highly engaging emotionally, strongly connects with the audience.
+
+            2. **Clarity of Argument and Reasoning**
+                - Are the arguments clearly presented? Is the reasoning sound and easy to follow?
+                - **0**: The arguments are unclear or confusing.
+                - **1**: The arguments are well-structured and easy to understand.
+
+            3. **Logical Arrangement of Arguments**
+                - Is the argument presented in a logical, coherent manner? Does each point flow into the next without confusion?
+                - **0**: The arguments are disorganized and difficult to follow.
+                - **1**: The arguments follow a clear and logical progression.
+
+            4. **Relevance to Debate Topic**
+                - Does each argument directly address the debate topic? Are there any irrelevant points or off-topic distractions?
+                - **0**: Arguments that stray far from the topic.
+                - **1**: Every argument is focused and relevant to the topic.
+
+        Please output the result in the following format:
+
+        1. **Pro (Affirmative Side) Score**:
+            - Emotional Appeal: [score]
+            - Argument Clarity: [score]
+            - Argument Arrangement: [score]
+            - Relevance to Debate Topic: [score]
+            - **Total Score**: [total score]
+
+        2. **Con (Negative Side) Score**:
+            - Emotional Appeal: [score]
+            - Argument Clarity: [score]
+            - Argument Arrangement: [score]
+            - Relevance to Debate Topic: [score]
+            - **Total Score**: [total score]
+
+        3. **Winner**: [Pro/Con]
+        4. **Reason**: [Provide detailed analysis based on the scores]
+        """
+
+        user_prompt = f"""
+        Evaluate the debate on the topic: '{topic}'
+        Debate analysis process and arguments are as follows:
+        {debate_text}
+        Provide a JSON formatted response with scores and comments for each criterion for both debaters.
+        """
+
+        response = self._client.models.generate_content(
+            model="gemini-2.5-flash",
+            config=genai.types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    response_mime_type="application/json",
+                    response_schema=DebateEval,
+                ),
+            contents=user_prompt,
+        )
+        return response.parsed
+
+
+async def main():
+    parser = argparse.ArgumentParser(description="Run the A2A debate judge.")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind the server")
+    parser.add_argument("--port", type=int, default=9019, help="Port to bind the server")
+    parser.add_argument("--card-url", type=str, help="External URL to provide in the agent card")
+    parser.add_argument("--cloudflare-quick-tunnel", action="store_true", help="Use a Cloudflare quick tunnel. Requires cloudflared. This will override --card-url")
+    args = parser.parse_args()
+
+    if args.cloudflare_quick_tunnel:
+        from agentbeats.cloudflare import quick_tunnel
+        agent_url_cm = quick_tunnel(f"http://{args.host}:{args.port}")
+    else:
+        agent_url_cm = contextlib.nullcontext(args.card_url or f"http://{args.host}:{args.port}/")
+
+    async with agent_url_cm as agent_url:
+        agent = DebateJudge()
+        executor = GreenExecutor(agent)
+        agent_card = debate_judge_agent_card("DebateJudge", agent_url)
+
+        request_handler = DefaultRequestHandler(
+            agent_executor=executor,
+            task_store=InMemoryTaskStore(),
+        )
+
+        server = A2AStarletteApplication(
+            agent_card=agent_card,
+            http_handler=request_handler,
+        )
+
+        uvicorn_config = uvicorn.Config(server.build(), host=args.host, port=args.port)
+        uvicorn_server = uvicorn.Server(uvicorn_config)
+        await uvicorn_server.serve()
+
+if __name__ == '__main__':
+    asyncio.run(main())
+
+
+
+================================================
+FILE: scenarios/debate/debate_judge_common.py
+================================================
+from pydantic import BaseModel
+from typing import Literal
+
+from a2a.types import (
+    AgentCapabilities,
+    AgentCard,
+    AgentSkill,
+)
+
+
+class DebaterScore(BaseModel):
+    emotional_appeal: float
+    argument_clarity: float
+    argument_arrangement: float
+    relevance_to_topic: float
+    total_score: float
+
+class DebateEval(BaseModel):
+    pro_debater: DebaterScore
+    con_debater: DebaterScore
+    winner: Literal["pro_debater", "con_debater"]
+    reason: str
+
+
+def debate_judge_agent_card(agent_name: str, card_url: str) -> AgentCard:
+    skill = AgentSkill(
+        id='moderate_and_judge_debate',
+        name='Orchestrates and judges debate',
+        description='Orchestrate and judge a debate between two agents on a given topic.',
+        tags=['debate'],
+        examples=["""
+{
+  "participants": {
+    "pro_debater": "https://pro-debater.example.com:443",
+    "con_debater": "https://con-debater.example.org:8443"
+  },
+  "config": {
+    "topic": "Should artificial intelligence be regulated?",
+    "num_rounds": 3
+  }
+}
+"""]
+    )
+    agent_card = AgentCard(
+        name=agent_name,
+        description='Orchestrate and judge a structured debate between pro and con agents on a given topic with multiple rounds of arguments.',
+        url=card_url,
+        version='1.0.0',
+        default_input_modes=['text'],
+        default_output_modes=['text'],
+        capabilities=AgentCapabilities(streaming=True),
+        skills=[skill],
+    )
+    return agent_card
+
+
+
+================================================
+FILE: scenarios/debate/debater.py
+================================================
+import argparse
+import uvicorn
+from dotenv import load_dotenv
+load_dotenv()
+
+from google.adk.agents import Agent
+from google.adk.a2a.utils.agent_to_a2a import to_a2a
+
+from a2a.types import (
+    AgentCapabilities,
+    AgentCard,
+)
+
+def main():
+    parser = argparse.ArgumentParser(description="Run the A2A debater agent.")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind the server")
+    parser.add_argument("--port", type=int, default=9019, help="Port to bind the server")
+    parser.add_argument("--card-url", type=str, help="External URL to provide in the agent card")
+    args = parser.parse_args()
+
+    root_agent = Agent(
+        name="debater",
+        model="gemini-2.0-flash",
+        description="Participates in a debate.",
+        instruction="You are a professional debater.",
+    )
+
+    agent_card = AgentCard(
+        name="debater",
+        description='Participates in a debate.',
+        url=args.card_url or f'http://{args.host}:{args.port}/',
+        version='1.0.0',
+        default_input_modes=['text'],
+        default_output_modes=['text'],
+        capabilities=AgentCapabilities(streaming=True),
+        skills=[],
+    )
+
+    a2a_app = to_a2a(root_agent, agent_card=agent_card)
+    uvicorn.run(a2a_app, host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+================================================
+FILE: scenarios/debate/Dockerfile.adk-debate-judge
+================================================
+FROM ghcr.io/astral-sh/uv:python3.12-trixie
+
+RUN adduser agentbeats
+USER agentbeats
+WORKDIR /home/agentbeats/tutorial
+
+COPY pyproject.toml uv.lock README.md ./
+COPY src src
+
+RUN \
+    --mount=type=cache,target=/home/agentbeats/.cache/uv,uid=1000 \
+    uv sync --locked
+
+COPY scenarios scenarios
+
+ENTRYPOINT ["uv", "run", "scenarios/debate/adk_debate_judge.py"]
+CMD ["--host", "0.0.0.0"]
+EXPOSE 9019
+
+
+
+================================================
+FILE: scenarios/debate/Dockerfile.debate-judge
+================================================
+FROM ghcr.io/astral-sh/uv:python3.12-trixie
+
+RUN adduser agentbeats
+USER agentbeats
+WORKDIR /home/agentbeats/tutorial
+
+COPY pyproject.toml uv.lock README.md ./
+COPY src src
+
+RUN \
+    --mount=type=cache,target=/home/agentbeats/.cache/uv,uid=1000 \
+    uv sync --locked
+
+COPY scenarios scenarios
+
+ENTRYPOINT ["uv", "run", "scenarios/debate/debate_judge.py"]
+CMD ["--host", "0.0.0.0"]
+EXPOSE 9009
+
+
+
+================================================
+FILE: scenarios/debate/Dockerfile.debater
+================================================
+FROM ghcr.io/astral-sh/uv:python3.12-trixie
+
+RUN adduser agentbeats
+USER agentbeats
+WORKDIR /home/agentbeats/tutorial
+
+COPY pyproject.toml uv.lock README.md ./
+COPY src src
+
+RUN \
+    --mount=type=cache,target=/home/agentbeats/.cache/uv,uid=1000 \
+    uv sync --locked
+
+COPY scenarios scenarios
+
+ENTRYPOINT ["uv", "run", "scenarios/debate/debater.py"]
+CMD ["--host", "0.0.0.0"]
+EXPOSE 9019
+
+
+
+================================================
+FILE: scenarios/debate/scenario.toml
+================================================
+[green_agent]
+endpoint = "http://127.0.0.1:9009"
+cmd = "python scenarios/debate/debate_judge.py --host 127.0.0.1 --port 9009"
+
+[[participants]]
+role = "pro_debater"
+endpoint = "http://127.0.0.1:9019"
+cmd = "python scenarios/debate/debater.py --host 127.0.0.1 --port 9019"
+
+[[participants]]
+role = "con_debater"
+endpoint = "http://127.0.0.1:9018"
+cmd = "python scenarios/debate/debater.py --host 127.0.0.1 --port 9018"
+
+[config]
+topic = "Should artificial intelligence be regulated?"
+num_rounds = 3
+
+
+
+================================================
+FILE: scenarios/tau2/Dockerfile.tau2-agent
+================================================
+FROM ghcr.io/astral-sh/uv:python3.12-trixie
+
+RUN adduser agentbeats
+USER agentbeats
+RUN mkdir -p /home/agentbeats/.cache/uv
+WORKDIR /home/agentbeats/tutorial
+
+COPY pyproject.toml uv.lock README.md ./
+COPY src src
+
+RUN \
+    --mount=type=cache,target=/home/agentbeats/.cache/uv,uid=1000 \
+    uv sync --locked
+
+COPY scenarios scenarios
+
+ENTRYPOINT ["uv", "run", "scenarios/tau2/tau2_agent.py"]
+CMD ["--host", "0.0.0.0"]
+EXPOSE 9019
+
+
+
+================================================
+FILE: scenarios/tau2/Dockerfile.tau2-evaluator
+================================================
+FROM ghcr.io/astral-sh/uv:python3.12-trixie
+
+RUN adduser agentbeats
+USER agentbeats
+RUN mkdir -p /home/agentbeats/.cache/uv
+WORKDIR /home/agentbeats/tutorial
+
+COPY pyproject.toml uv.lock README.md ./
+COPY src src
+
+RUN \
+    --mount=type=cache,target=/home/agentbeats/.cache/uv,uid=1000 \
+    uv sync --locked
+
+# Install tau2 from GitHub (not on PyPI)
+RUN \
+    --mount=type=cache,target=/home/agentbeats/.cache/uv,uid=1000 \
+    uv pip install "tau2 @ git+https://github.com/sierra-research/tau2-bench.git"
+
+# Download tau2 data
+USER root
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+USER agentbeats
+
+RUN git clone --depth 1 --filter=blob:none --sparse https://github.com/sierra-research/tau2-bench.git /home/agentbeats/tau2-bench && \
+    cd /home/agentbeats/tau2-bench && \
+    git sparse-checkout set data
+
+ENV TAU2_DATA_DIR=/home/agentbeats/tau2-bench/data
+
+COPY scenarios scenarios
+
+ENTRYPOINT ["uv", "run", "scenarios/tau2/tau2_evaluator.py"]
+CMD ["--host", "0.0.0.0"]
+EXPOSE 9009
+
+
+
+================================================
+FILE: scenarios/tau2/scenario.toml
+================================================
+[green_agent]
+endpoint = "http://127.0.0.1:9009"
+cmd = "python scenarios/tau2/tau2_evaluator.py --host 127.0.0.1 --port 9009"
+
+[[participants]]
+role = "agent"
+endpoint = "http://127.0.0.1:9019"
+cmd = "python scenarios/tau2/tau2_agent.py --host 127.0.0.1 --port 9019"
+
+[config]
+domain = "airline"
+num_tasks = 3
+
+
+
+================================================
+FILE: scenarios/tau2/tau2_agent.py
+================================================
+"""
+Tau2 Agent - Purple agent that solves tau-bench tasks.
+
+This is the agent being tested. It:
+1. Receives task descriptions with available tools from the green agent
+2. Decides which tool to call or how to respond
+3. Returns responses in the expected JSON format wrapped in <json>...</json> tags
+"""
+import argparse
+import os
+import uvicorn
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from a2a.server.agent_execution import AgentExecutor, RequestContext
+from a2a.server.apps import A2AStarletteApplication
+from a2a.server.events import EventQueue
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+from a2a.utils import new_agent_text_message
+from litellm import completion
+from loguru import logger
+
+
+def prepare_agent_card(url: str) -> AgentCard:
+    """Create the agent card for the tau2 purple agent."""
+    skill = AgentSkill(
+        id="task_fulfillment",
+        name="Task Fulfillment",
+        description="Solves customer service tasks for tau-bench evaluation",
+        tags=["benchmark", "tau2"],
+        examples=[],
+    )
+    return AgentCard(
+        name="tau2_agent",
+        description="Customer service agent for tau-bench evaluation",
+        url=url,
+        version="1.0.0",
+        default_input_modes=["text/plain"],
+        default_output_modes=["text/plain"],
+        capabilities=AgentCapabilities(),
+        skills=[skill],
+    )
+
+
+SYSTEM_PROMPT = """You are a helpful customer service agent being evaluated on your ability to solve tasks.
+
+You will receive:
+1. A policy describing your role and guidelines
+2. A list of available tools you can use
+3. User messages that you need to respond to
+
+CRITICAL: You MUST respond in the exact JSON format specified, wrapped in <json>...</json> tags.
+
+For tool calls, respond with:
+<json>
+{"name": "tool_name", "arguments": {"arg1": "value1", ...}}
+</json>
+
+To respond directly to the user, use:
+<json>
+{"name": "respond", "arguments": {"content": "Your message here"}}
+</json>
+
+Rules:
+- Only use one tool at a time
+- You cannot respond to the user AND use a tool in the same message
+- Follow the policy guidelines provided
+- Be helpful and accurate
+- ALWAYS wrap your response in <json>...</json> tags
+"""
+
+
+class Tau2AgentExecutor(AgentExecutor):
+    """Executor for the tau2 purple agent."""
+
+    def __init__(self):
+        self.ctx_id_to_messages: dict[str, list[dict]] = {}
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        user_input = context.get_user_input()
+        logger.info(f"Received input: {user_input[:200]}...")
+
+        # Initialize or get conversation history
+        if context.context_id not in self.ctx_id_to_messages:
+            self.ctx_id_to_messages[context.context_id] = [
+                {"role": "system", "content": SYSTEM_PROMPT}
+            ]
+
+        messages = self.ctx_id_to_messages[context.context_id]
+        messages.append({"role": "user", "content": user_input})
+
+        # Call LLM
+        try:
+            response = completion(
+                messages=messages,
+                model="openai/gpt-4o",
+                temperature=0.0,
+            )
+            assistant_content = response.choices[0].message.content
+            logger.info(f"LLM response: {assistant_content[:200]}...")
+        except Exception as e:
+            logger.error(f"LLM error: {e}")
+            assistant_content = '<json>\n{"name": "respond", "arguments": {"content": "I encountered an error processing your request."}}\n</json>'
+
+        # Add assistant response to history
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        # Send response back via A2A
+        await event_queue.enqueue_event(
+            new_agent_text_message(assistant_content, context_id=context.context_id)
+        )
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
+        raise NotImplementedError
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run the tau2 agent (purple agent).")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind the server")
+    parser.add_argument("--port", type=int, default=9019, help="Port to bind the server")
+    parser.add_argument("--card-url", type=str, help="External URL for the agent card")
+    args = parser.parse_args()
+
+    logger.info("Starting tau2 agent...")
+    card = prepare_agent_card(args.card_url or f"http://{args.host}:{args.port}/")
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=Tau2AgentExecutor(),
+        task_store=InMemoryTaskStore(),
+    )
+
+    app = A2AStarletteApplication(
+        agent_card=card,
+        http_handler=request_handler,
+    )
+
+    uvicorn.run(
+        app.build(),
+        host=args.host,
+        port=args.port,
+        timeout_keep_alive=300,
+    )
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+================================================
+FILE: scenarios/tau2/tau2_evaluator.py
+================================================
+"""
+Tau2 Evaluator - Green agent that runs tau-bench evaluation on purple agents.
+
+This agent:
+1. Sets up tau-bench gymnasium environments
+2. Sends task prompts to the purple agent (the agent being tested)
+3. Parses the purple agent's tool-call responses
+4. Steps through the environment and collects metrics
+"""
+import argparse
+import asyncio
+import json
+import logging
+import time
+from typing import Any, Optional
+
+import gymnasium as gym
+import uvicorn
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from a2a.server.apps import A2AStarletteApplication
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
+from a2a.types import (
+    AgentCapabilities,
+    AgentCard,
+    AgentSkill,
+    DataPart,
+    Part,
+    TaskState,
+    TextPart,
+)
+from a2a.utils import new_agent_text_message
+
+from agentbeats.green_executor import GreenAgent, GreenExecutor
+from agentbeats.models import EvalRequest
+from agentbeats.tool_provider import ToolProvider
+
+from tau2.data_model.simulation import RewardInfo
+from tau2.environment.tool import Tool
+from tau2.gym import TAU_BENCH_ENV_ID, register_gym_agent
+from tau2.run import get_tasks
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("tau2_evaluator")
+
+RESPOND_ACTION_NAME = "respond"
+
+# Register tau-bench gym environments
+register_gym_agent()
+
+
+def tools_to_str(tools: list[Tool]) -> str:
+    """Convert tau-bench tools to JSON schema format."""
+    return json.dumps([tool.openai_schema for tool in tools], indent=2)
+
+
+def get_task_ids(domain: str, task_ids: Optional[list[str]], num_tasks: Optional[int] = None) -> list[str]:
+    """Get task IDs for the domain, optionally limited to num_tasks."""
+    task_set_name = domain
+    task_split_name = "base"
+    if task_ids is None:
+        tasks = get_tasks(task_set_name=task_set_name, task_split_name=task_split_name)
+    else:
+        tasks = get_tasks(
+            task_set_name=task_set_name,
+            task_split_name=task_split_name,
+            task_ids=task_ids,
+        )
+
+    result = [task.id for task in tasks]
+    if num_tasks is not None:
+        result = result[:num_tasks]
+    return result
+
+
+class Tau2Evaluator(GreenAgent):
+    """Green agent that evaluates purple agents using tau-bench."""
+
+    def __init__(self):
+        self._required_roles = ["agent"]  # The purple agent being tested
+        self._required_config_keys = ["domain"]
+        self._tool_provider = ToolProvider()
+
+    def validate_request(self, request: EvalRequest) -> tuple[bool, str]:
+        missing_roles = set(self._required_roles) - set(request.participants.keys())
+        if missing_roles:
+            return False, f"Missing roles: {missing_roles}"
+        missing_config_keys = set(self._required_config_keys) - set(request.config.keys())
+        if missing_config_keys:
+            return False, f"Missing config keys: {missing_config_keys}"
+        return True, "ok"
+
+    async def run_eval(self, req: EvalRequest, updater: TaskUpdater) -> None:
+        logger.info(f"Starting tau2 evaluation: {req}")
+        start_time = time.time()
+
+        domain = req.config["domain"]
+        task_ids = req.config.get("task_ids", None)
+        num_tasks = req.config.get("num_tasks", None)
+        max_steps = req.config.get("max_steps", 200)
+        user_llm = req.config.get("user_llm", "openai/gpt-4o")
+        user_llm_args = req.config.get("user_llm_args", {"temperature": 0.0})
+
+        # Get the purple agent URL
+        agent_url = str(req.participants["agent"])
+
+        # Get task IDs
+        resolved_task_ids = get_task_ids(domain, task_ids, num_tasks)
+        logger.info(f"Running {len(resolved_task_ids)} tasks for domain {domain}")
+
+        await updater.update_status(
+            TaskState.working,
+            new_agent_text_message(f"Starting evaluation of {len(resolved_task_ids)} tasks in {domain} domain")
+        )
+
+        metrics: dict[str, Any] = {"tasks": {}}
+
+        try:
+            for task_id in resolved_task_ids:
+                logger.info(f"Running task {task_id}...")
+                await updater.update_status(
+                    TaskState.working,
+                    new_agent_text_message(f"Running task {task_id}...")
+                )
+
+                try:
+                    reward = await self._run_single_task(
+                        agent_url=agent_url,
+                        domain=domain,
+                        task_id=task_id,
+                        max_steps=max_steps,
+                        user_llm=user_llm,
+                        user_llm_args=user_llm_args,
+                    )
+                    metrics["tasks"][task_id] = reward
+                    logger.info(f"Task {task_id} completed with reward: {reward}")
+                except Exception as e:
+                    logger.error(f"Task {task_id} failed: {e}")
+                    metrics["tasks"][task_id] = 0.0
+
+            time_used = time.time() - start_time
+            total_reward = sum(metrics["tasks"].values())
+            num_completed = len(metrics["tasks"])
+            pass_rate = (total_reward / num_completed * 100) if num_completed > 0 else 0
+
+            result_data = {
+                "domain": domain,
+                "score": total_reward,
+                "max_score": num_completed,
+                "pass_rate": pass_rate,
+                "task_rewards": metrics["tasks"],
+                "time_used": time_used,
+            }
+
+            # Format task results for display
+            task_results_str = "\n".join(
+                f"  {task_id}: {'✓' if reward == 1.0 else '✗'} ({reward})"
+                for task_id, reward in metrics["tasks"].items()
+            )
+
+            summary = f"""Tau2 Benchmark Results
+Domain: {domain}
+Tasks: {num_completed}
+Pass Rate: {pass_rate:.1f}% ({int(total_reward)}/{num_completed})
+Time: {time_used:.1f}s
+
+Task Results:
+{task_results_str}"""
+
+            await updater.add_artifact(
+                parts=[
+                    Part(root=TextPart(text=summary)),
+                    Part(root=DataPart(data=result_data)),
+                ],
+                name="Result",
+            )
+
+        finally:
+            self._tool_provider.reset()
+
+    async def _run_single_task(
+        self,
+        agent_url: str,
+        domain: str,
+        task_id: str,
+        max_steps: int,
+        user_llm: str,
+        user_llm_args: dict,
+    ) -> float:
+        """Run a single tau-bench task and return the reward."""
+
+        env = gym.make(
+            TAU_BENCH_ENV_ID,
+            domain=domain,
+            task_id=task_id,
+            max_steps=max_steps,
+            user_llm=user_llm,
+            user_llm_args=user_llm_args,
+            all_messages_as_observation=False,
+        )
+
+        terminated = False
+        observation, info = env.reset()
+
+        # Build the initial task description for the purple agent
+        task_description = self._build_task_prompt(info, observation)
+
+        # Start a new conversation with the purple agent
+        next_message = task_description
+        is_first_message = True
+
+        while not terminated:
+            logger.debug(f"Sending to purple agent: {next_message[:200]}...")
+
+            # Send message to purple agent
+            response = await self._tool_provider.talk_to_agent(
+                message=next_message,
+                url=agent_url,
+                new_conversation=is_first_message,
+            )
+            is_first_message = False
+
+            logger.debug(f"Purple agent response: {response[:200]}...")
+
+            # Parse the purple agent's action
+            try:
+                action = self._parse_agent_response(response)
+            except Exception as e:
+                logger.error(f"Failed to parse agent response: {e}")
+                # When parsing fails, respond with error as plain text (not a tool call)
+                action = "I encountered an error processing the request."
+
+            # Step the environment with either a JSON string (tool call) or plain text (user response)
+            observation, reward, terminated, truncated, info = env.step(action)
+            logger.debug(f"Environment step: reward={reward}, terminated={terminated}")
+
+            if terminated:
+                break
+
+            next_message = observation
+
+        # Extract final reward
+        if info.get("reward_info"):
+            reward_info = RewardInfo.model_validate_json(info["reward_info"])
+            return reward_info.reward
+        return float(reward)
+
+    def _build_task_prompt(self, info: dict, observation: str) -> str:
+        """Build the initial task prompt for the purple agent."""
+        return f"""
+{info["policy"]}
+
+Here's a list of tools you can use (you can use at most one tool at a time):
+{tools_to_str(info["tools"])}
+
+Please respond in JSON format. Wrap the JSON with <json>...</json> tags.
+The JSON should contain:
+- "name": the tool call function name, or "{RESPOND_ACTION_NAME}" if you want to respond directly.
+- "arguments": the arguments for the tool call, or {{"content": "your message here"}} if you want to respond directly.
+
+You should only use one tool at a time!
+You cannot respond to user and use a tool at the same time!
+
+Examples of responses:
+<json>
+{json.dumps({"name": "find_user_id_by_name_zip", "arguments": {"first_name": "Yusuf", "last_name": "Rossi", "zip_code": "19122"}}, indent=2)}
+</json>
+
+<json>
+{json.dumps({"name": RESPOND_ACTION_NAME, "arguments": {"content": "Hello, how can I help you today?"}}, indent=2)}
+</json>
+
+Now here is the user message:
+{observation}
+"""
+
+    def _parse_agent_response(self, response: str) -> str:
+        """Parse the purple agent's response to extract the action."""
+        import re
+
+        json_str = None
+
+        # Try to extract JSON from <json>...</json> tags
+        match = re.search(r'<json>\s*(.*?)\s*</json>', response, re.DOTALL)
+        if match:
+            json_str = match.group(1)
+        else:
+            # Try to extract JSON from markdown code blocks ```json ... ```
+            match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+            if match:
+                json_str = match.group(1)
+            else:
+                # Try to extract from generic code blocks ``` ... ```
+                match = re.search(r'```\s*(.*?)\s*```', response, re.DOTALL)
+                if match:
+                    json_str = match.group(1)
+
+        if json_str:
+            action_dict = json.loads(json_str)
+        else:
+            # Try to parse the entire response as JSON
+            action_dict = json.loads(response)
+
+        is_tool_call = action_dict["name"] != RESPOND_ACTION_NAME
+        if not is_tool_call:
+            return action_dict["arguments"]["content"]
+        else:
+            return json.dumps(action_dict)
+
+
+def tau2_evaluator_agent_card(name: str, url: str) -> AgentCard:
+    """Create the agent card for the tau2 evaluator."""
+    skill = AgentSkill(
+        id="tau2_evaluation",
+        name="Tau2 Benchmark Evaluation",
+        description="Evaluates agents on tau-bench tasks (airline, retail domains)",
+        tags=["benchmark", "evaluation", "tau2"],
+        examples=[
+            '{"participants": {"agent": "http://localhost:9019"}, "config": {"domain": "airline", "num_tasks": 5}}'
+        ],
+    )
+    return AgentCard(
+        name=name,
+        description="Tau2 benchmark evaluator - tests agents on customer service tasks",
+        url=url,
+        version="1.0.0",
+        default_input_modes=["text"],
+        default_output_modes=["text"],
+        capabilities=AgentCapabilities(streaming=True),
+        skills=[skill],
+    )
+
+
+async def main():
+    parser = argparse.ArgumentParser(description="Run the tau2 evaluator agent.")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind the server")
+    parser.add_argument("--port", type=int, default=9009, help="Port to bind the server")
+    parser.add_argument("--card-url", type=str, help="External URL for the agent card")
+    args = parser.parse_args()
+
+    agent_url = args.card_url or f"http://{args.host}:{args.port}/"
+
+    agent = Tau2Evaluator()
+    executor = GreenExecutor(agent)
+    agent_card = tau2_evaluator_agent_card("Tau2Evaluator", agent_url)
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=executor,
+        task_store=InMemoryTaskStore(),
+    )
+
+    server = A2AStarletteApplication(
+        agent_card=agent_card,
+        http_handler=request_handler,
+    )
+
+    uvicorn_config = uvicorn.Config(server.build(), host=args.host, port=args.port)
+    uvicorn_server = uvicorn.Server(uvicorn_config)
+    await uvicorn_server.serve()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
+
+
+================================================
+FILE: src/agentbeats/__init__.py
+================================================
+"""Agentbeats Tutorial Framework"""
+
+
+================================================
+FILE: src/agentbeats/client.py
+================================================
+import asyncio
+import json
+import logging
+from uuid import uuid4
+
+import httpx
+from a2a.client import (
+    A2ACardResolver,
+    ClientConfig,
+    ClientFactory,
+    Consumer,
+)
+from a2a.types import (
+    Message,
+    Part,
+    Role,
+    TextPart,
+    DataPart,
+)
+
+
+DEFAULT_TIMEOUT = 300
+
+
+def create_message(*, role: Role = Role.user, text: str, context_id: str | None = None) -> Message:
+    return Message(
+        kind="message",
+        role=role,
+        parts=[Part(TextPart(kind="text", text=text))],
+        message_id=uuid4().hex,
+        context_id=context_id
+    )
+
+def merge_parts(parts: list[Part]) -> str:
+    chunks = []
+    for part in parts:
+        if isinstance(part.root, TextPart):
+            chunks.append(part.root.text)
+        elif isinstance(part.root, DataPart):
+            chunks.append(json.dumps(part.root.data, indent=2))
+    return "\n".join(chunks)
+
+async def send_message(message: str, base_url: str, context_id: str | None = None, streaming=False, consumer: Consumer | None = None):
+    """Returns dict with context_id, response and status (if exists)"""
+    async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as httpx_client:
+        resolver = A2ACardResolver(httpx_client=httpx_client, base_url=base_url)
+        agent_card = await resolver.get_agent_card()
+        config = ClientConfig(
+            httpx_client=httpx_client,
+            streaming=streaming,
+        )
+        factory = ClientFactory(config)
+        client = factory.create(agent_card)
+        if consumer:
+            await client.add_event_consumer(consumer)
+
+        outbound_msg = create_message(text=message, context_id=context_id)
+        last_event = None
+        outputs = {
+            "response": "",
+            "context_id": None
+        }
+
+        # if streaming == False, only one event is generated
+        async for event in client.send_message(outbound_msg):
+            last_event = event
+
+        match last_event:
+            case Message() as msg:
+                outputs["context_id"] = msg.context_id
+                outputs["response"] += merge_parts(msg.parts)
+
+            case (task, update):
+                outputs["context_id"] = task.context_id
+                outputs["status"] = task.status.state.value
+                msg = task.status.message
+                if msg:
+                    outputs["response"] += merge_parts(msg.parts)
+                if task.artifacts:
+                    for artifact in task.artifacts:
+                        outputs["response"] += merge_parts(artifact.parts)
+
+            case _:
+                pass
+
+        return outputs
+
+
+
+================================================
+FILE: src/agentbeats/client_cli.py
+================================================
+import sys
+import json
+import asyncio
+from pathlib import Path
+
+import tomllib
+
+from agentbeats.client import send_message
+from agentbeats.models import EvalRequest
+from a2a.types import (
+    AgentCard,
+    Message,
+    TaskStatusUpdateEvent,
+    TaskArtifactUpdateEvent,
+    Artifact,
+    TextPart,
+    DataPart,
+)
+
+
+def parse_toml(d: dict[str, object]) -> tuple[EvalRequest, str, dict[str, str]]:
+    green = d.get("green_agent")
+    if not isinstance(green, dict) or "endpoint" not in green:
+        raise ValueError("green.endpoint is required in TOML")
+    green_endpoint: str = green["endpoint"]
+
+    parts: dict[str, str] = {}
+    role_to_id: dict[str, str] = {}
+
+    for p in d.get("participants", []):
+        if isinstance(p, dict):
+            role = p.get("role")
+            endpoint = p.get("endpoint")
+            agentbeats_id = p.get("agentbeats_id")
+            if role and endpoint:
+                parts[role] = endpoint
+            if role and agentbeats_id:
+                role_to_id[role] = agentbeats_id
+
+    eval_req = EvalRequest(
+        participants=parts,
+        config=d.get("config", {}) or {}
+    )
+    return eval_req, green_endpoint, role_to_id
+
+def parse_parts(parts) -> tuple[list, list]:
+    text_parts = []
+    data_parts = []
+
+    for part in parts:
+        if isinstance(part.root, TextPart):
+            try:
+                data_item = json.loads(part.root.text)
+                data_parts.append(data_item)
+            except Exception:
+                text_parts.append(part.root.text.strip())
+        elif isinstance(part.root, DataPart):
+            data_parts.append(part.root.data)
+
+    return text_parts, data_parts
+
+def print_parts(parts, task_state: str | None = None):
+    text_parts, data_parts = parse_parts(parts)
+
+    output = []
+    if task_state:
+        output.append(f"[Status: {task_state}]")
+    if text_parts:
+        output.append("\n".join(text_parts))
+    if data_parts:
+        output.extend(json.dumps(item, indent=2) for item in data_parts)
+
+    print("\n".join(output) + "\n")
+
+async def main():
+    if len(sys.argv) < 2:
+        print("Usage: python client_cli.py <scenario.toml> [output.json]")
+        sys.exit(1)
+
+    scenario_path = Path(sys.argv[1])
+    output_path = Path(sys.argv[2]) if len(sys.argv) > 2 else None
+
+    if not scenario_path.exists():
+        print(f"File not found: {scenario_path}")
+        sys.exit(1)
+
+    toml_data = scenario_path.read_text()
+    data = tomllib.loads(toml_data)
+
+    req, green_url, role_to_id = parse_toml(data)
+
+    artifacts: list[Artifact] = []
+
+    async def event_consumer(event, card: AgentCard):
+        nonlocal artifacts
+        match event:
+            case Message() as msg:
+                print_parts(msg.parts)
+
+            case (task, TaskStatusUpdateEvent() as status_event):
+                status = status_event.status
+                parts = status.message.parts if status.message else []
+                print_parts(parts, status.state.value)
+                if status.state.value == "completed":
+                    print(task.artifacts)
+                    artifacts = task.artifacts
+                elif status.state.value not in ["submitted", "working"]:
+                    print(f"Agent returned status {status.state.value}. Exiting.")
+                    exit(1)
+
+            case (task, TaskArtifactUpdateEvent() as artifact_event):
+                print_parts(artifact_event.artifact.parts, "Artifact update")
+
+            case task, None:
+                status = task.status
+                parts = status.message.parts if status.message else []
+                print_parts(parts, task.status.state.value)
+                if status.state.value == "completed":
+                    print(task.artifacts)
+                    artifacts = task.artifacts
+                elif status.state.value not in ["submitted", "working"]:
+                    print(f"Agent returned status {status.state.value}. Exiting.")
+                    exit(1)
+
+            case _:
+                print("Unhandled event")
+
+    msg = req.model_dump_json()
+    await send_message(msg, green_url, streaming=True, consumer=event_consumer)
+
+    if output_path:
+        all_data_parts = []
+        for artifact in artifacts:
+            _, data_parts = parse_parts(artifact.parts)
+            all_data_parts.extend(data_parts)
+
+        output_data = {
+            "participants": role_to_id,
+            "results": all_data_parts
+        }
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w") as f:
+            json.dump(output_data, f, indent=2)
+            print(f"Results written to {output_path}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
+
+
+================================================
+FILE: src/agentbeats/cloudflare.py
+================================================
+import asyncio
+import contextlib
+import sys
+
+@contextlib.asynccontextmanager
+async def quick_tunnel(tunnel_url: str):
+    process = await asyncio.create_subprocess_exec(
+        "cloudflared", "tunnel",
+        "--url", tunnel_url,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    route_future: asyncio.Future[str] = asyncio.Future()
+    async def tee_and_find_route(stream: asyncio.StreamReader):
+        state = "waiting_for_banner"
+        async for line in stream:
+            sys.stderr.buffer.write(line)
+            # https://github.com/cloudflare/cloudflared/blob/2025.9.1/cmd/cloudflared/tunnel/quick_tunnel.go#L79
+            if state == "waiting_for_banner":
+                if b"Your quick Tunnel has been created!" in line:
+                    state = "waiting_for_route"
+            elif state == "waiting_for_route":
+                parts = line.split(b"|")
+                if len(parts) == 3:
+                    route_future.set_result(parts[1].strip().decode())
+                    state = "done"
+    assert process.stderr
+    tee_task = asyncio.create_task(tee_and_find_route(process.stderr))
+    route = await route_future
+    try:
+        yield route
+    finally:
+        process.terminate()
+        await process.wait()
+        await tee_task
+
+
+
+================================================
+FILE: src/agentbeats/green_executor.py
+================================================
+from abc import abstractmethod
+from pydantic import ValidationError
+
+from a2a.server.agent_execution import AgentExecutor, RequestContext
+from a2a.server.events import EventQueue
+from a2a.server.tasks import TaskUpdater
+from a2a.types import (
+    InvalidParamsError,
+    Task,
+    TaskState,
+    UnsupportedOperationError,
+    InternalError,
+)
+from a2a.utils import (
+    new_agent_text_message,
+    new_task,
+)
+from a2a.utils.errors import ServerError
+
+from agentbeats.models import EvalRequest
+
+
+class GreenAgent:
+
+    @abstractmethod
+    async def run_eval(self, request: EvalRequest, updater: TaskUpdater) -> None:
+        pass
+
+    @abstractmethod
+    def validate_request(self, request: EvalRequest) -> tuple[bool, str]:
+        pass
+
+
+class GreenExecutor(AgentExecutor):
+
+    def __init__(self, green_agent: GreenAgent):
+        self.agent = green_agent
+
+    async def execute(
+        self,
+        context: RequestContext,
+        event_queue: EventQueue,
+    ) -> None:
+        request_text = context.get_user_input()
+        try:
+            req: EvalRequest = EvalRequest.model_validate_json(request_text)
+            ok, msg = self.agent.validate_request(req)
+            if not ok:
+                raise ServerError(error=InvalidParamsError(message=msg))
+        except ValidationError as e:
+            raise ServerError(error=InvalidParamsError(message=e.json()))
+
+        msg = context.message
+        if msg:
+            task = new_task(msg)
+            await event_queue.enqueue_event(task)
+        else:
+            raise ServerError(error=InvalidParamsError(message="Missing message."))
+
+        updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await updater.update_status(
+            TaskState.working,
+            new_agent_text_message(f"Starting assessment.\n{req.model_dump_json()}", context_id=context.context_id)
+        )
+
+        try:
+            await self.agent.run_eval(req, updater)
+            await updater.complete()
+        except Exception as e:
+            print(f"Agent error: {e}")
+            await updater.failed(new_agent_text_message(f"Agent error: {e}", context_id=context.context_id))
+            raise ServerError(error=InternalError(message=str(e)))
+
+    async def cancel(
+        self, request: RequestContext, event_queue: EventQueue
+    ) -> Task | None:
+        raise ServerError(error=UnsupportedOperationError())
+
+
+
+================================================
+FILE: src/agentbeats/models.py
+================================================
+from typing import Any
+from pydantic import BaseModel, HttpUrl
+
+class EvalRequest(BaseModel):
+    participants: dict[str, HttpUrl] # role-endpoint mapping
+    config: dict[str, Any]
+
+class EvalResult(BaseModel):
+    winner: str # role of winner
+    detail: dict[str, Any]
+
+
+
+================================================
+FILE: src/agentbeats/run_scenario.py
+================================================
+import argparse
+import asyncio
+import os, sys, time, subprocess, shlex, signal
+from pathlib import Path
+import tomllib
+import httpx
+from dotenv import load_dotenv
+
+from a2a.client import A2ACardResolver
+
+
+load_dotenv(override=True)
+
+
+async def wait_for_agents(cfg: dict, timeout: int = 30) -> bool:
+    """Wait for all agents to be healthy and responding."""
+    endpoints = []
+
+    # Collect all endpoints to check
+    for p in cfg["participants"]:
+        if p.get("cmd"):  # Only check if there's a command (agent to start)
+            endpoints.append(f"http://{p['host']}:{p['port']}")
+
+    if cfg["green_agent"].get("cmd"):  # Only check if there's a command (host to start)
+        endpoints.append(f"http://{cfg['green_agent']['host']}:{cfg['green_agent']['port']}")
+
+    if not endpoints:
+        return True  # No agents to wait for
+
+    print(f"Waiting for {len(endpoints)} agent(s) to be ready...")
+    start_time = time.time()
+
+    async def check_endpoint(endpoint: str) -> bool:
+        """Check if an endpoint is responding by fetching the agent card."""
+        try:
+            async with httpx.AsyncClient(timeout=2) as client:
+                resolver = A2ACardResolver(httpx_client=client, base_url=endpoint)
+                await resolver.get_agent_card()
+                return True
+        except Exception:
+            # Any exception means the agent is not ready
+            return False
+
+    while time.time() - start_time < timeout:
+        ready_count = 0
+        for endpoint in endpoints:
+            if await check_endpoint(endpoint):
+                ready_count += 1
+
+        if ready_count == len(endpoints):
+            return True
+
+        print(f"  {ready_count}/{len(endpoints)} agents ready, waiting...")
+        await asyncio.sleep(1)
+
+    print(f"Timeout: Only {ready_count}/{len(endpoints)} agents became ready after {timeout}s")
+    return False
+
+
+def parse_toml(scenario_path: str) -> dict:
+    path = Path(scenario_path)
+    if not path.exists():
+        print(f"Error: Scenario file not found: {path}")
+        sys.exit(1)
+
+    data = tomllib.loads(path.read_text())
+
+    def host_port(ep: str):
+        s = (ep or "")
+        s = s.replace("http://", "").replace("https://", "")
+        s = s.split("/", 1)[0]
+        host, port = s.split(":", 1)
+        return host, int(port)
+
+    green_ep = data.get("green_agent", {}).get("endpoint", "")
+    g_host, g_port = host_port(green_ep)
+    green_cmd = data.get("green_agent", {}).get("cmd", "")
+
+    parts = []
+    for p in data.get("participants", []):
+        if isinstance(p, dict) and "endpoint" in p:
+            h, pt = host_port(p["endpoint"])
+            parts.append({
+                "role": str(p.get("role", "")),
+                "host": h,
+                "port": pt,
+                "cmd": p.get("cmd", "")
+            })
+
+    cfg = data.get("config", {})
+    return {
+        "green_agent": {"host": g_host, "port": g_port, "cmd": green_cmd},
+        "participants": parts,
+        "config": cfg,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run agent scenario")
+    parser.add_argument("scenario", help="Path to scenario TOML file")
+    parser.add_argument("--show-logs", action="store_true",
+                        help="Show agent stdout/stderr")
+    parser.add_argument("--serve-only", action="store_true",
+                        help="Start agent servers only without running evaluation")
+    args = parser.parse_args()
+
+    cfg = parse_toml(args.scenario)
+
+    sink = None if args.show_logs or args.serve_only else subprocess.DEVNULL
+    parent_bin = str(Path(sys.executable).parent)
+    base_env = os.environ.copy()
+    base_env["PATH"] = parent_bin + os.pathsep + base_env.get("PATH", "")
+
+    procs = []
+    try:
+        # start participant agents
+        for p in cfg["participants"]:
+            cmd_args = shlex.split(p.get("cmd", ""))
+            if cmd_args:
+                print(f"Starting {p['role']} at {p['host']}:{p['port']}")
+                procs.append(subprocess.Popen(
+                    cmd_args,
+                    env=base_env,
+                    stdout=sink, stderr=sink,
+                    text=True,
+                    start_new_session=True,
+                ))
+
+        # start host
+        green_cmd_args = shlex.split(cfg["green_agent"].get("cmd", ""))
+        if green_cmd_args:
+            print(f"Starting green agent at {cfg['green_agent']['host']}:{cfg['green_agent']['port']}")
+            procs.append(subprocess.Popen(
+                green_cmd_args,
+                env=base_env,
+                stdout=sink, stderr=sink,
+                text=True,
+                start_new_session=True,
+            ))
+
+        # Wait for all agents to be ready
+        if not asyncio.run(wait_for_agents(cfg)):
+            print("Error: Not all agents became ready. Exiting.")
+            return
+
+        print("Agents started. Press Ctrl+C to stop.")
+        if args.serve_only:
+            while True:
+                for proc in procs:
+                    if proc.poll() is not None:
+                        print(f"Agent exited with code {proc.returncode}")
+                        break
+                    time.sleep(0.5)
+        else:
+            client_proc = subprocess.Popen(
+                [sys.executable, "-m", "agentbeats.client_cli", args.scenario],
+                env=base_env,
+                start_new_session=True,
+            )
+            procs.append(client_proc)
+            client_proc.wait()
+
+    except KeyboardInterrupt:
+        pass
+
+    finally:
+        print("\nShutting down...")
+        for p in procs:
+            if p.poll() is None:
+                try:
+                    os.killpg(p.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+        time.sleep(1)
+        for p in procs:
+            if p.poll() is None:
+                try:
+                    os.killpg(p.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+================================================
+FILE: src/agentbeats/tool_provider.py
+================================================
+from agentbeats.client import send_message
+
+
+class ToolProvider:
+    def __init__(self):
+        self._context_ids = {}
+
+    async def talk_to_agent(self, message: str, url: str, new_conversation: bool = False):
+        """
+        Communicate with another agent by sending a message and receiving their response.
+
+        Args:
+            message: The message to send to the agent
+            url: The agent's URL endpoint
+            new_conversation: If True, start fresh conversation; if False, continue existing conversation
+
+        Returns:
+            str: The agent's response message
+        """
+        outputs = await send_message(message=message, base_url=url, context_id=None if new_conversation else self._context_ids.get(url, None))
+        if outputs.get("status", "completed") != "completed":
+            raise RuntimeError(f"{url} responded with: {outputs}")
+        self._context_ids[url] = outputs.get("context_id", None)
+        return outputs["response"]
+
+    def reset(self):
+        self._context_ids = {}
+
+
+
+================================================
+FILE: .github/workflows/publish.yml
+================================================
+name: Publish Agents
+
+# Trigger this workflow when pushing main branch and tags
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0, v1.1.0
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          # Update this to build your own agent images.
+          - name: adk-debate-judge
+            dockerfile: scenarios/debate/Dockerfile.adk-debate-judge
+          - name: debate-judge
+            dockerfile: scenarios/debate/Dockerfile.debate-judge
+          - name: debater
+            dockerfile: scenarios/debate/Dockerfile.debater
+          - name: tau2-agent
+            dockerfile: scenarios/tau2/Dockerfile.tau2-agent
+          - name: tau2-evaluator
+            dockerfile: scenarios/tau2/Dockerfile.tau2-evaluator
+
+    # These permissions are required for the workflow to:
+    # - Read repository contents (checkout code)
+    # - Write to GitHub Container Registry (push Docker images)
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          # GITHUB_TOKEN is automatically provided by GitHub Actions
+          # No manual secret configuration needed!
+          # It has permissions based on the 'permissions' block above
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-${{ matrix.name }}
+          tags: |
+            # For tags like v1.0, create tag '1.0'
+            type=semver,pattern={{version}}
+            # For tags like v1.0, create tag '1'
+            type=semver,pattern={{major}}
+            # For main branch, create tag 'latest'
+            type=raw,value=latest,enable={{is_default_branch}}
+            # For PRs, create tag 'pr-123'
+            type=ref,event=pr
+
+      - name: Build and push Docker image (${{ matrix.name }})
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          # Only push if this is a push event (not a PR)
+          # PRs will build but not push to avoid polluting the registry
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Explicitly build for linux/amd64 (GitHub Actions default)
+          platforms: linux/amd64
+
+      - name: Output image digest
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "## Docker Image Published: ${{ matrix.name }} :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:** ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Digest:** \`${{ steps.build.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Use this digest in your MANIFEST.json for reproducibility." >> $GITHUB_STEP_SUMMARY
+
+

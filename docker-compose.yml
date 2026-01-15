@@ -1,0 +1,68 @@
+# Auto-generated from scenario.toml
+# Run: docker compose up --abort-on-container-exit
+#
+# IMPORTANT: Volume mounts ensure results are accessible on host machine
+# - ./results/ - Green Agent writes evaluation results here
+# - ./output/  - Final AgentBeats-compatible results
+
+services:
+  green-agent:
+    image: weag-green-agent:latest
+    platform: linux/amd64
+    container_name: green-agent
+    command: ["--host", "0.0.0.0", "--port", "9009", "--card-url", "http://green-agent:9009"]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - BROWSER_HEADLESS=true
+    volumes:
+      - ./results:/app/results    # Green Agent output directory
+      - ./output:/app/output      # Shared results directory
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9009/.well-known/agent-card.json"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      agent:
+        condition: service_healthy
+    networks:
+      - agent-network
+
+  agent:
+    image: weag-purple-agent:latest
+    platform: linux/amd64
+    container_name: agent
+    command: ["--host", "0.0.0.0", "--port", "9009", "--card-url", "http://agent:9009"]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9009/.well-known/agent-card.json"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    networks:
+      - agent-network
+
+  agentbeats-client:
+    image: ghcr.io/agentbeats/agentbeats-client:v1.0.0
+    platform: linux/amd64
+    container_name: agentbeats-client
+    volumes:
+      - ./a2a-scenario.toml:/app/scenario.toml
+      - ./output:/app/output
+    command: ["scenario.toml", "output/results.json"]
+    depends_on:
+      green-agent:
+        condition: service_healthy
+      agent:
+        condition: service_healthy
+    networks:
+      - agent-network
+
+networks:
+  agent-network:
+    driver: bridge

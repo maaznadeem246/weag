@@ -1,0 +1,131 @@
+# Docker/AgentBeats Scenario for BrowserGym Web Evaluation
+# This config is used for Docker containers and AgentBeats platform.
+#
+# USAGE:
+#   docker-compose up                                   # Start Docker containers
+#   python kickstart_assessment.py --task miniwob.click-test  # Will auto-detect running containers
+#
+# For local testing without Docker, use scenario-local.toml instead.
+
+# =============================================================================
+# CONFIGURATION - All assessment settings centralized here
+# =============================================================================
+[config]
+# Domain-specific settings
+domain = "browsergym"  # benchmark domain: browsergym, airline, etc.
+
+# Assessment execution settings
+timeout_seconds = 120  # Default timeout for the whole assessment run (seconds)
+max_steps = 10  # Default max steps per task (passed to Green Agent)
+max_tasks_per_benchmark = 2  # Default max tasks per benchmark
+headless = true  # Browser visibility (false = visible, true = headless)
+
+# Optional: Override max tasks for all benchmarks
+# num_tasks = 3
+
+# =============================================================================
+# GREEN AGENT (Evaluator)
+# =============================================================================
+[green_agent]
+# AgentBeats platform registration ID (required for GitHub Actions)
+agentbeats_id = ""  # Your green agent ID from AgentBeats platform
+
+endpoint = "http://localhost:9009"
+# For local testing: use 'image' field
+image = "weag-green-agent:latest"  # Local Docker image name
+
+# Environment variables - API keys injected from GitHub Actions secrets or .env
+# Use ${VAR_NAME} syntax for dynamic injection from secrets
+env = {
+    GREEN_LLM_PROVIDER = "openai",
+    GREEN_OPENAI_MODEL = "gpt-4o",
+    GREEN_OPENAI_API_KEY = "${OPENAI_API_KEY}",
+    # GREEN_GEMINI_MODEL = "gemini-2.5-flash",
+    # GREEN_GEMINI_API_KEY = "${GEMINI_API_KEY}",
+    # GREEN_LITELLM_MODEL = "google/gemini-2.0-flash-exp:free",
+    # GREEN_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}",
+    # LANGFUSE_PUBLIC_KEY = "${LANGFUSE_PUBLIC_KEY}",
+    # LANGFUSE_SECRET_KEY = "${LANGFUSE_SECRET_KEY}",
+}
+
+# =============================================================================
+# PURPLE AGENT (Participant)
+# =============================================================================
+[[participants]]
+# AgentBeats platform registration ID (required for GitHub Actions)
+agentbeats_id = ""  # Your purple agent ID from AgentBeats platform
+name = "purple_agent"
+role = "purple_agent"
+
+endpoint = "http://localhost:9010/"
+# For local testing: use 'image' field
+image = "weag-purple-agent:latest"  # Local Docker image name
+
+# Environment variables - API keys injected from GitHub Actions secrets or .env
+# Use ${VAR_NAME} syntax for dynamic injection from secrets
+env = {
+    PURPLE_LLM_PROVIDER = "openai",
+    PURPLE_OPENAI_MODEL = "gpt-4o",
+    PURPLE_OPENAI_API_KEY = "${OPENAI_API_KEY}",
+    # PURPLE_GEMINI_MODEL = "gemini-2.5-flash",
+    # PURPLE_GEMINI_API_KEY = "${GEMINI_API_KEY}",
+    # PURPLE_LITELLM_MODEL = "openai/gpt-oss-120b",
+    # PURPLE_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}",
+    # LANGFUSE_PUBLIC_KEY = "${LANGFUSE_PUBLIC_KEY}",
+    # LANGFUSE_SECRET_KEY = "${LANGFUSE_SECRET_KEY}",
+}
+
+# =============================================================================
+# BENCHMARKS CONFIGURATION
+# =============================================================================
+# Each [[benchmarks]] section defines a benchmark to evaluate.
+# 
+# Options:
+#   id        - Benchmark identifier (miniwob, assistantbench, webarena, etc.)
+#   max_tasks - Max tasks to run for THIS benchmark (overrides global max_tasks_per_benchmark)
+#   tasks     - OPTIONAL explicit task list. If OMITTED, auto-discovers available tasks!
+#
+# AUTO-DISCOVERY MODE (RECOMMENDED):
+#   Simply omit the `tasks` line - system will find all available tasks and limit by max_tasks
+#
+# SUPPORTED BENCHMARKS:
+#   - miniwob: Requires local dataset at benchmarks/miniwob/html/miniwob/
+#   - assistantbench: Auto-downloads from HuggingFace (no setup needed)
+#   - webarena: Requires Docker containers (WA_* env vars)
+#   - visualwebarena: Requires Docker containers (VWA_* env vars)
+#   - workarena: Requires ServiceNow dev instance (WORKARENA_* env vars)
+#   - weblinx: Requires dataset download (WEBLINX_DATA_PATH env var)
+
+# MiniWoB - Local HTML tasks (ready to use)
+# [[benchmarks]]
+# id = "miniwob"
+# Uses global max_tasks_per_benchmark
+
+# AssistantBench - HuggingFace tasks (ready to use)
+# [[benchmarks]]
+# id = "assistantbench"
+
+# WebArena - Requires Docker setup (comment out if not available)
+# [[benchmarks]]
+# id = "webarena"
+# max_tasks = 3
+
+# VisualWebArena - Requires Docker setup (comment out if not available)
+# [[benchmarks]]
+# id = "visualwebarena"
+# max_tasks = 3
+
+# WorkArena - Requires ServiceNow instance (comment out if not available)
+# [[benchmarks]]
+# id = "workarena"
+# max_tasks = 3
+
+# WebLINX - Requires dataset download (comment out if not available)
+# [[benchmarks]]
+# id = "weblinx"
+# max_tasks = 3
+
+# EXPLICIT MODE EXAMPLE (uncomment to use specific tasks):
+# [[benchmarks]]
+# id = "miniwob"
+# tasks = ["click-test", "ascending-numbers", "book-flight"]

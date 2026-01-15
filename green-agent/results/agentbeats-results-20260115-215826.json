@@ -1,0 +1,210 @@
+{
+  "participants": {
+    "green_agent": {
+      "name": "weag-green-agent",
+      "role": "evaluator"
+    },
+    "purple_agent": {
+      "name": "purple_agent",
+      "url": "http://127.0.0.1:9010/",
+      "role": "participant"
+    }
+  },
+  "results": [
+    {
+      "mode": "multi",
+      "run_id": "eval_44f615b2_1768495981",
+      "orchestrated_by_llm": true,
+      "total_tasks": 4,
+      "passed_tasks": 1,
+      "failed_tasks": 3,
+      "completed_tasks": 4,
+      "success_rate": 0.25,
+      "total_tokens": 0,
+      "total_latency_ms": 0,
+      "total_actions": 0,
+      "benchmarks": [
+        "miniwob",
+        "assistantbench"
+      ],
+      "task_results": [
+        {
+          "task_id": "miniwob.ascending-numbers",
+          "benchmark": "miniwob",
+          "task_index": 0,
+          "status": "failed",
+          "success": false,
+          "final_reward": 0.0,
+          "done": false,
+          "truncated": true,
+          "metrics": {
+            "tokens": 0,
+            "latency_ms": 0,
+            "actions": 0,
+            "observations": 0,
+            "mcp_calls": 0
+          },
+          "start_time": "2026-01-15T16:55:21.718034",
+          "end_time": "2026-01-15T16:55:41.886832",
+          "completion_time": 0.0,
+          "error": "Inactivity timeout after 20.2s"
+        },
+        {
+          "task_id": "miniwob.bisect-angle",
+          "benchmark": "miniwob",
+          "task_index": 1,
+          "status": "completed",
+          "success": true,
+          "final_reward": 1.0,
+          "done": true,
+          "truncated": false,
+          "metrics": {
+            "tokens": 0,
+            "latency_ms": 0,
+            "actions": 0,
+            "observations": 0,
+            "mcp_calls": 0
+          },
+          "start_time": "2026-01-15T16:55:55.631829",
+          "end_time": "2026-01-15T16:55:55.631829",
+          "completion_time": 0.0,
+          "error": null
+        },
+        {
+          "task_id": "assistantbench.imp.0",
+          "benchmark": "assistantbench",
+          "task_index": 2,
+          "status": "failed",
+          "success": false,
+          "final_reward": 0.0,
+          "done": false,
+          "truncated": true,
+          "metrics": {
+            "tokens": 0,
+            "latency_ms": 0,
+            "actions": 0,
+            "observations": 0,
+            "mcp_calls": 0
+          },
+          "start_time": "2026-01-15T16:56:50.055075",
+          "end_time": "2026-01-15T16:56:58.194132",
+          "completion_time": 0.0,
+          "error": "Inactivity timeout after 8.1s"
+        },
+        {
+          "task_id": "assistantbench.test.0",
+          "benchmark": "assistantbench",
+          "task_index": 3,
+          "status": "failed",
+          "success": false,
+          "final_reward": 0.0,
+          "done": false,
+          "truncated": true,
+          "metrics": {
+            "tokens": 0,
+            "latency_ms": 0,
+            "actions": 0,
+            "observations": 0,
+            "mcp_calls": 0
+          },
+          "start_time": "2026-01-15T16:58:18.636068",
+          "end_time": "2026-01-15T16:58:26.717849",
+          "completion_time": 0.0,
+          "error": "Inactivity timeout after 8.1s"
+        }
+      ],
+      "participants": {
+        "purple_agent": {
+          "tasks": [
+            {
+              "task_id": "miniwob.ascending-numbers",
+              "benchmark": "miniwob",
+              "task_index": 0,
+              "status": "failed",
+              "success": false,
+              "final_reward": 0.0,
+              "done": false,
+              "truncated": true,
+              "metrics": {
+                "tokens": 0,
+                "latency_ms": 0,
+                "actions": 0,
+                "observations": 0,
+                "mcp_calls": 0
+              },
+              "start_time": "2026-01-15T16:55:21.718034",
+              "end_time": "2026-01-15T16:55:41.886832",
+              "completion_time": 0.0,
+              "error": "Inactivity timeout after 20.2s"
+            },
+            {
+              "task_id": "miniwob.bisect-angle",
+              "benchmark": "miniwob",
+              "task_index": 1,
+              "status": "completed",
+              "success": true,
+              "final_reward": 1.0,
+              "done": true,
+              "truncated": false,
+              "metrics": {
+                "tokens": 0,
+                "latency_ms": 0,
+                "actions": 0,
+                "observations": 0,
+                "mcp_calls": 0
+              },
+              "start_time": "2026-01-15T16:55:55.631829",
+              "end_time": "2026-01-15T16:55:55.631829",
+              "completion_time": 0.0,
+              "error": null
+            },
+            {
+              "task_id": "assistantbench.imp.0",
+              "benchmark": "assistantbench",
+              "task_index": 2,
+              "status": "failed",
+              "success": false,
+              "final_reward": 0.0,
+              "done": false,
+              "truncated": true,
+              "metrics": {
+                "tokens": 0,
+                "latency_ms": 0,
+                "actions": 0,
+                "observations": 0,
+                "mcp_calls": 0
+              },
+              "start_time": "2026-01-15T16:56:50.055075",
+              "end_time": "2026-01-15T16:56:58.194132",
+              "completion_time": 0.0,
+              "error": "Inactivity timeout after 8.1s"
+            },
+            {
+              "task_id": "assistantbench.test.0",
+              "benchmark": "assistantbench",
+              "task_index": 3,
+              "status": "failed",
+              "success": false,
+              "final_reward": 0.0,
+              "done": false,
+              "truncated": true,
+              "metrics": {
+                "tokens": 0,
+                "latency_ms": 0,
+                "actions": 0,
+                "observations": 0,
+                "mcp_calls": 0
+              },
+              "start_time": "2026-01-15T16:58:18.636068",
+              "end_time": "2026-01-15T16:58:26.717849",
+              "completion_time": 0.0,
+              "error": "Inactivity timeout after 8.1s"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "timestamp": "2026-01-15T21:58:26.723849",
+  "run_id": "eval_44f615b2_1768495981"
+}

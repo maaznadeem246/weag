@@ -1,0 +1,12 @@
+[green_agent]
+endpoint = "http://green-agent:9009"
+
+[[participants]]
+role = "agent"
+endpoint = "http://agent:9009"
+
+[config]
+task_id = "miniwob.click-test"
+benchmark = "miniwob"
+max_steps = 10
+timeout_seconds = 120

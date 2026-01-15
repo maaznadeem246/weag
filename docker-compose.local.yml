@@ -1,0 +1,134 @@
+# Docker Compose for Local Testing
+# Usage: docker compose -f docker-compose.local.yml up
+#
+# This sets up:
+# - Green Agent (evaluator) with MCP server on ports 9009 (A2A) and 8001 (MCP)
+# - Purple Agent (participant) on port 9010
+# - Shared network for communication
+#
+# Run from host machine: python kickstart_assessment.py --green-agent-url http://localhost:9009
+
+services:
+  green-agent:
+    build:
+      context: ./green-agent
+      dockerfile: Dockerfile
+      args:
+        DOCKER_EXTRAS: docker-minimal  # Use docker-minimal for faster builds, docker for all benchmarks
+    image: weag-green-agent:latest
+    container_name: weag-green-agent
+    command: ["--host", "0.0.0.0", "--port", "9009", "--card-url", "http://green-agent:9009/", "--mcp-url", "http://green-agent:8001/mcp"]
+    ports:
+      - "9009:9009"  # A2A server (Green Agent API)
+      - "8001:8001"  # MCP server (spawned by Green Agent)
+    environment:
+      # Python
+      - PYTHONUNBUFFERED=1
+      
+      # LLM Provider (Gemini via OpenRouter)
+      - GREEN_LLM_PROVIDER=litellm
+      - GREEN_LITELLM_MODEL=openrouter/google/gemini-2.5-flash
+      - GREEN_OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      
+      # Purple Agent URL for Docker networking (container-to-container)
+      # Inside Docker, use service name instead of localhost
+      - PURPLE_AGENT_URL=http://purple-agent:9010/
+      
+      # Browser Configuration
+      - BROWSER_HEADLESS=true
+      
+      # Langfuse (optional - comment out if not using)
+      # - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      # - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      # - LANGFUSE_HOST=https://cloud.langfuse.com
+      
+      # Benchmark Paths (auto-configured from datasets/)
+      # MINIWOB_URL is auto-configured from green-agent/datasets/miniwob/
+    
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9009/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    networks:
+      - weag-network
+    
+    # Optional: Mount logs for debugging
+    volumes:
+      - ./green-agent/logs:/home/agent/logs
+
+  purple-agent:
+    build:
+      context: ./purple-agent
+      dockerfile: Dockerfile
+    image: weag-purple-agent:latest
+    container_name: weag-purple-agent
+    command: ["--host", "0.0.0.0", "--port", "9010", "--card-url", "http://purple-agent:9010/"]
+    ports:
+      - "9010:9010"  # A2A server (Purple Agent API)
+    environment:
+      # Python
+      - PYTHONUNBUFFERED=1
+      
+      # LLM Provider (Gemini via OpenRouter)
+      - PURPLE_LLM_PROVIDER=litellm
+      - PURPLE_LITELLM_MODEL=openrouter/google/gemini-2.5-flash
+      - PURPLE_OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      
+      # Langfuse (optional)
+      # - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      # - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      # - LANGFUSE_HOST=https://cloud.langfuse.com
+    
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9010/.well-known/agent-card.json || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    
+    depends_on:
+      green-agent:
+        condition: service_healthy
+    
+    networks:
+      - weag-network
+    
+    # Optional: Mount logs for debugging
+    volumes:
+      - ./purple-agent/logs:/home/agent/logs
+
+networks:
+  weag-network:
+    driver: bridge
+    name: weag-network
+
+# USAGE INSTRUCTIONS:
+# 
+# 1. Set your API key in .env file:
+#    OPENROUTER_API_KEY=your_key_here
+# 
+# 2. Build images:
+#    docker compose -f docker-compose.local.yml build
+# 
+# 3. Start containers:
+#    docker compose -f docker-compose.local.yml up
+# 
+# 4. In another terminal, run kickstart:
+#    python kickstart_assessment.py
+# 
+# 5. View logs:
+#    docker compose -f docker-compose.local.yml logs -f green-agent
+#    docker compose -f docker-compose.local.yml logs -f purple-agent
+# 
+# 6. Stop containers:
+#    docker compose -f docker-compose.local.yml down
+# 
+# NOTES:
+# - MCP server runs INSIDE green-agent container (port 8001)
+# - Green Agent spawns MCP server automatically when assessment starts
+# - Purple Agent connects to MCP server via http://green-agent:8001
+# - From host machine, use http://localhost:9009 for Green Agent
+# - Logs are mounted to green-agent/logs and purple-agent/logs for easy access

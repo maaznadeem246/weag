@@ -1,0 +1,82 @@
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.pyenv/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.cover
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+tests/
+
+# Logs
+*.log
+logs/
+
+# Documentation (not needed in container)
+*.md
+!README.md
+docs/
+
+# Specs (design documents)
+specs/
+
+# Resources (reference documentation)
+resources/
+
+# Docker files themselves
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+*.backup
+*.bak
+
+# Coverage reports
+htmlcov/
+
+# Playwright browsers (installed at runtime)
+.cache/ms-playwright/

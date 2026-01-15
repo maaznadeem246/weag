@@ -1,0 +1,16 @@
+{
+  "typeCheckingMode": "off",
+  "reportMissingImports": false,
+  "reportMissingTypeStubs": false,
+  "reportUnknownParameterType": false,
+  "reportUnknownArgumentType": false,
+  "reportUnknownLambdaType": false,
+  "reportUnknownVariableType": false,
+  "reportUnknownMemberType": false,
+  "reportMissingTypeArgument": false,
+  "reportUnnecessaryIsInstance": false,
+  "reportUnnecessaryCast": false,
+  "reportUnnecessaryComparison": false,
+  "reportAttributeAccessIssue": false,
+  "reportCallIssue": false
+}
