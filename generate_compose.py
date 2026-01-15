@@ -153,7 +153,7 @@ def resolve_image(agent: dict, name: str) -> None:
 
 def parse_scenario(scenario_path: Path) -> dict[str, Any]:
     """Parse scenario.toml and resolve agent images."""
-    toml_data = scenario_path.read_text()
+    toml_data = scenario_path.read_text(encoding="utf-8")
     data = tomli.loads(toml_data)
 
     green = data.get("green_agent", {})
@@ -238,7 +238,23 @@ def generate_a2a_scenario(scenario: dict[str, Any]) -> str:
         participant_lines.append("\n".join(lines) + "\n")
 
     config_section = scenario.get("config", {})
+    
+    # Include benchmarks in config section if present
+    benchmarks = scenario.get("benchmarks", [])
+    if benchmarks:
+        # Add benchmarks to config section as array of tables
+        config_section = config_section.copy() if config_section else {}
+        # Don't modify original, create new dict for TOML generation
+    
     config_lines = [tomli_w.dumps({"config": config_section})]
+    
+    # Add benchmark sections separately
+    if benchmarks:
+        for bench in benchmarks:
+            bench_line = f"\n[[benchmarks]]\nid = \"{bench['id']}\""
+            if "max_tasks" in bench:
+                bench_line += f"\nmax_tasks = {bench['max_tasks']}"
+            config_lines.append(bench_line)
 
     return A2A_SCENARIO_TEMPLATE.format(
         green_port=DEFAULT_PORT,

@@ -33,8 +33,11 @@ headless = true  # Browser visibility (false = visible, true = headless)
 # GREEN AGENT (Evaluator) - Docker Container Configuration
 # =============================================================================
 [green_agent]
-# AgentBeats platform registration ID (for GitHub Actions deployment)
-agentbeats_id = ""  # Your green agent ID from AgentBeats
+# Docker image (for local testing - comment out when using agentbeats_id for GitHub Actions)
+image = "weag-green-agent:latest"
+
+# AgentBeats platform registration ID (uncomment for GitHub Actions deployment)
+# agentbeats_id = ""  # Your green agent ID from AgentBeats
 
 # Docker container endpoint (exposed on localhost)
 endpoint = "http://localhost:9009"
@@ -42,22 +45,17 @@ endpoint = "http://localhost:9009"
 
 # Environment variables - API keys injected from .env or GitHub Actions secrets
 # Use ${VAR_NAME} syntax for dynamic injection (GitHub Actions, CI/CD)
-env = {
-    GREEN_LLM_PROVIDER = "openai",
-    GREEN_OPENAI_MODEL = "gpt-4o",
-    GREEN_OPENAI_API_KEY = "${OPENAI_API_KEY}",
-    # GREEN_GEMINI_API_KEY = "${GEMINI_API_KEY}",
-    # GREEN_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}",
-    # LANGFUSE_PUBLIC_KEY = "${LANGFUSE_PUBLIC_KEY}",
-    # LANGFUSE_SECRET_KEY = "${LANGFUSE_SECRET_KEY}",
-}
+env = { GREEN_LLM_PROVIDER = "openai", GREEN_OPENAI_MODEL = "gpt-4o", GREEN_OPENAI_API_KEY = "${OPENAI_API_KEY}" }
 
 # =============================================================================
 # PURPLE AGENT (Participant) - Docker Container
 # =============================================================================
 [[participants]]
-# AgentBeats platform registration ID (for GitHub Actions deployment)
-agentbeats_id = ""  # Your purple agent ID from AgentBeats
+# Docker image (for local testing - comment out when using agentbeats_id for GitHub Actions)
+image = "weag-purple-agent:latest"
+
+# AgentBeats platform registration ID (uncomment for GitHub Actions deployment)
+# agentbeats_id = ""  # Your purple agent ID from AgentBeats
 name = "purple_agent"
 role = "purple_agent"
 
@@ -67,15 +65,7 @@ endpoint = "http://purple-agent:9010/"
 
 # Environment variables - API keys injected from .env or GitHub Actions secrets
 # Use ${VAR_NAME} syntax for dynamic injection (GitHub Actions, CI/CD)
-env = {
-    PURPLE_LLM_PROVIDER = "openai",
-    PURPLE_OPENAI_MODEL = "gpt-4o",
-    PURPLE_OPENAI_API_KEY = "${OPENAI_API_KEY}",
-    # PURPLE_GEMINI_API_KEY = "${GEMINI_API_KEY}",
-    # PURPLE_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}",
-    # LANGFUSE_PUBLIC_KEY = "${LANGFUSE_PUBLIC_KEY}",
-    # LANGFUSE_SECRET_KEY = "${LANGFUSE_SECRET_KEY}",
-}
+env = { PURPLE_LLM_PROVIDER = "openai", PURPLE_OPENAI_MODEL = "gpt-4o", PURPLE_OPENAI_API_KEY = "${OPENAI_API_KEY}" }
 
 # =============================================================================
 # BENCHMARKS CONFIGURATION
@@ -99,13 +89,13 @@ env = {
 #   - weblinx: Requires dataset download (WEBLINX_DATA_PATH env var)
 
 # MiniWoB - Local HTML tasks (ready to use)
-# [[benchmarks]]
-# id = "miniwob"
-# Uses global max_tasks_per_benchmark
+[[benchmarks]]
+id = "miniwob"
+# Uses global max_tasks_per_benchmark (2 tasks)
 
 # AssistantBench - HuggingFace tasks (ready to use)
-# [[benchmarks]]
-# id = "assistantbench"
+[[benchmarks]]
+id = "assistantbench"
 
 # WebArena - Requires Docker setup (comment out if not available)
 # [[benchmarks]]

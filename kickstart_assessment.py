@@ -698,11 +698,18 @@ class KickstartOrchestrator:
             benchmarks = plan.get("benchmarks", [])
             tasks_by_benchmark = plan.get("tasks_by_benchmark", {})
             
+            # Check if tasks_by_benchmark has any actual tasks
+            has_explicit_tasks = any(len(tasks) > 0 for tasks in tasks_by_benchmark.values())
+            
             config.update({
                 "mode": "multi",
                 "benchmarks": benchmarks,  # Can be empty - Green Agent will use defaults
-                "tasks_by_benchmark": tasks_by_benchmark,  # Can be empty - Green Agent will discover
             })
+            
+            # Only pass tasks_by_benchmark if there are explicit tasks
+            # Otherwise, Green Agent will auto-discover tasks
+            if has_explicit_tasks:
+                config["tasks_by_benchmark"] = tasks_by_benchmark
             
             # Only include max_tasks_per_benchmark if explicitly set in TOML
             # Otherwise, Green Agent will use its DEFAULT_MAX_TASKS_PER_BENCHMARK

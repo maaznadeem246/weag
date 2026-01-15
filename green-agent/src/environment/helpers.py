@@ -58,10 +58,11 @@ def _find_project_root() -> Path:
 
 
 # Benchmark dataset path configuration (relative to green-agent root)
-# Maps benchmark -> (env_var_name, relative_path_from_green_agent_root)
+# Maps benchmark -> (env_var_name, [relative_paths_to_try])
 # Benchmarks with None use remote data (HuggingFace, web APIs) - no local path needed
+# Multiple paths are tried in order (Docker uses 'benchmarks/', local uses 'datasets/')
 BENCHMARK_PATHS = {
-    "miniwob": ("MINIWOB_URL", "datasets/miniwob/html/miniwob"),
+    "miniwob": ("MINIWOB_URL", ["benchmarks/miniwob/html/miniwob", "datasets/miniwob/html/miniwob"]),
     "webarena": ("WEBARENA_BASE_URL", None),  # Remote URL, no local path
     "visualwebarena": ("VISUALWEBARENA_BASE_URL", None),  # Remote URL
     "workarena": ("WORKARENA_BASE_URL", None),  # Remote URL
@@ -88,22 +89,30 @@ def normalize_benchmark_environment_vars(
         logger.debug(f"No path configuration for benchmark: {benchmark}")
         return
     
-    env_var_name, relative_path = BENCHMARK_PATHS[benchmark]
+    env_var_name, relative_paths = BENCHMARK_PATHS[benchmark]
     
     # Skip benchmarks that use remote URLs (no local path)
-    if relative_path is None:
+    if relative_paths is None:
         logger.debug(f"{benchmark} uses remote URL, skipping local path setup")
         return
     
-    # Determine project root and construct absolute path
+    # Determine project root
     project_root = benchmarks_root or _find_project_root()
-    dataset_path = project_root / relative_path
     
-    # Verify path exists
-    if not dataset_path.exists():
+    # Try each path in order (Docker uses 'benchmarks/', local uses 'datasets/')
+    dataset_path = None
+    for relative_path in relative_paths:
+        candidate = project_root / relative_path
+        if candidate.exists():
+            dataset_path = candidate
+            break
+    
+    # Verify path was found
+    if dataset_path is None:
+        tried_paths = [str(project_root / p) for p in relative_paths]
         logger.warning(
-            f"Benchmark dataset not found: {dataset_path}",
-            extra={"benchmark": benchmark, "expected_path": str(dataset_path)}
+            f"Benchmark dataset not found. Tried: {tried_paths}",
+            extra={"benchmark": benchmark}
         )
         return
     

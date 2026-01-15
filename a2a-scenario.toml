@@ -2,11 +2,19 @@
 endpoint = "http://green-agent:9009"
 
 [[participants]]
-role = "agent"
-endpoint = "http://agent:9009"
+role = "purple_agent"
+endpoint = "http://purple_agent:9009"
 
 [config]
-task_id = "miniwob.click-test"
-benchmark = "miniwob"
-max_steps = 10
+domain = "browsergym"
 timeout_seconds = 120
+max_steps = 10
+max_tasks_per_benchmark = 2
+headless = true
+
+
+[[benchmarks]]
+id = "miniwob"
+
+[[benchmarks]]
+id = "assistantbench"

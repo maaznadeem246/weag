@@ -1,9 +1,5 @@
 # Auto-generated from scenario.toml
 # Run: docker compose up --abort-on-container-exit
-#
-# IMPORTANT: Volume mounts ensure results are accessible on host machine
-# - ./results/ - Green Agent writes evaluation results here
-# - ./output/  - Final AgentBeats-compatible results
 
 services:
   green-agent:
@@ -13,11 +9,9 @@ services:
     command: ["--host", "0.0.0.0", "--port", "9009", "--card-url", "http://green-agent:9009"]
     environment:
       - PYTHONUNBUFFERED=1
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - BROWSER_HEADLESS=true
-    volumes:
-      - ./results:/app/results    # Green Agent output directory
-      - ./output:/app/output      # Shared results directory
+      - GREEN_LLM_PROVIDER=openai
+      - GREEN_OPENAI_MODEL=gpt-4o
+      - GREEN_OPENAI_API_KEY=${OPENAI_API_KEY}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9009/.well-known/agent-card.json"]
       interval: 5s
@@ -25,19 +19,21 @@ services:
       retries: 10
       start_period: 30s
     depends_on:
-      agent:
+      purple_agent:
         condition: service_healthy
     networks:
       - agent-network
 
-  agent:
+  purple_agent:
     image: weag-purple-agent:latest
     platform: linux/amd64
-    container_name: agent
-    command: ["--host", "0.0.0.0", "--port", "9009", "--card-url", "http://agent:9009"]
+    container_name: purple_agent
+    command: ["--host", "0.0.0.0", "--port", "9009", "--card-url", "http://purple_agent:9009"]
     environment:
       - PYTHONUNBUFFERED=1
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - PURPLE_LLM_PROVIDER=openai
+      - PURPLE_OPENAI_MODEL=gpt-4o
+      - PURPLE_OPENAI_API_KEY=${OPENAI_API_KEY}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9009/.well-known/agent-card.json"]
       interval: 5s
@@ -58,7 +54,7 @@ services:
     depends_on:
       green-agent:
         condition: service_healthy
-      agent:
+      purple_agent:
         condition: service_healthy
     networks:
       - agent-network

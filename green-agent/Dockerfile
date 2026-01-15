@@ -31,8 +31,9 @@ WORKDIR /home/agent
 COPY --chown=agent:agent pyproject.toml uv.lock README.md ./
 
 # Copy source and datasets
+# Note: datasets/ contains benchmark data, copied to benchmarks/ to match TaskDiscovery expectations
 COPY --chown=agent:agent src src
-COPY --chown=agent:agent datasets datasets
+COPY --chown=agent:agent datasets benchmarks
 
 # Install dependencies with docker extras for all benchmarks
 # Use docker-minimal for faster builds with only miniwob + assistantbench
@@ -65,11 +66,11 @@ ENV TIMEOUT_SECONDS=120
 
 # LLM Provider settings (from [green_agent].env)
 # API keys should be passed at runtime, not baked into image
-# ENV GREEN_LLM_PROVIDER=openrouter
-# ENV GREEN_OPENAI_MODEL=google/gemini-2.5-flash
+ENV GREEN_LLM_PROVIDER=openai
+ENV GREEN_OPENAI_MODEL=gpt-4o
 # ENV GREEN_OPENAI_API_KEY=  # Pass at runtime
-# ENV GREEN_GEMINI_API_KEY=  # Pass at runtime
-# ENV GREEN_OPENROUTER_API_KEY=  # Pass at runtime
+# ENV GREEN_GEMINI_API_KEY=  # Pass at runtime (if using gemini)
+# ENV GREEN_OPENROUTER_API_KEY=  # Pass at runtime (if using openrouter)
 
 # Langfuse tracing (optional - pass at runtime if needed)
 # ENV LANGFUSE_PUBLIC_KEY=
