@@ -9,7 +9,7 @@
 ### Prerequisites
 
 - Python 3.11+
-- `GEMINI_API_KEY` (for LLM)
+- `OPENAI_API_KEY` (for LLM)
 
 ### Setup
 
@@ -18,7 +18,7 @@ git clone <your-repo-url>
 cd weag
 
 cp sample.env .env
-# Edit .env → add GEMINI_API_KEY=your_key_here
+# Edit .env → add OPENAI_API_KEY=your_key_here
 ```
 
 ---
