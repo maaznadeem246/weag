@@ -41,21 +41,39 @@ ARG DOCKER_EXTRAS=docker-minimal
 RUN --mount=type=cache,target=/home/agent/.cache/uv,uid=1000 \
     uv sync --locked --extra ${DOCKER_EXTRAS}
 
-# Set Playwright cache path BEFORE installation for proper caching
+# Set Playwright cache path BEFORE installation
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/agent/.cache/ms-playwright
 
-# Install Playwright browsers with both cache mounts (uv cache + playwright cache)
-RUN --mount=type=cache,target=/home/agent/.cache/uv,uid=1000 \
-    --mount=type=cache,target=/home/agent/.cache/ms-playwright,uid=1000 \
-    uv run playwright install chromium
+# Install Playwright browsers (NO cache mount - browsers must persist in image)
+RUN uv run playwright install chromium
 ENV DISPLAY=:99
 
-# Default configuration (can be overridden at runtime)
-# For standalone deployment, set these environment variables:
-# - AGENT_CARD_URL: External URL for agent card (e.g., https://your-domain.com/)
-# - MCP_EXTERNAL_URL: External MCP URL for Docker/remote networking (e.g., http://green-agent:8001/mcp)
-ENV AGENT_CARD_URL="" 
+# =============================================================================
+# Default configuration from scenario-docker.toml
+# All can be overridden at runtime via docker-compose or -e flags
+# =============================================================================
+
+# Agent card and MCP URLs (for Docker networking)
+ENV AGENT_CARD_URL=""
 ENV MCP_EXTERNAL_URL=""
+
+# Assessment settings (from [config] section)
+ENV BROWSER_HEADLESS=true
+ENV MAX_STEPS=10
+ENV MAX_TASKS_PER_BENCHMARK=2
+ENV TIMEOUT_SECONDS=120
+
+# LLM Provider settings (from [green_agent].env)
+# API keys should be passed at runtime, not baked into image
+# ENV GREEN_LLM_PROVIDER=openrouter
+# ENV GREEN_OPENAI_MODEL=google/gemini-2.5-flash
+# ENV GREEN_OPENAI_API_KEY=  # Pass at runtime
+# ENV GREEN_GEMINI_API_KEY=  # Pass at runtime
+# ENV GREEN_OPENROUTER_API_KEY=  # Pass at runtime
+
+# Langfuse tracing (optional - pass at runtime if needed)
+# ENV LANGFUSE_PUBLIC_KEY=
+# ENV LANGFUSE_SECRET_KEY=
 
 # Use module execution (-m) to avoid import path conflicts
 # Running as a module ensures the installed a2a-sdk package takes precedence
