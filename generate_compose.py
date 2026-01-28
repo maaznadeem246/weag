@@ -76,7 +76,7 @@ services:
     image: {green_image}
     platform: linux/amd64
     container_name: green-agent
-    command: ["--host", "0.0.0.0", "--port", "{green_port}", "--card-url", "http://green-agent:{green_port}"]
+    command: ["--host", "0.0.0.0", "--port", "{green_port}", "--card-url", "http://green-agent:{green_port}", "--mcp-url", "http://green-agent:8001/mcp"]
     environment:{green_env}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:{green_port}/.well-known/agent-card.json"]
@@ -196,6 +196,7 @@ def generate_docker_compose(scenario: dict[str, Any]) -> str:
     """Generate docker-compose.yml content from scenario."""
     green = scenario["green_agent"]
     participants = scenario.get("participants", [])
+    assessment = scenario.get("assessment", {})
 
     participant_names = [p["name"] for p in participants]
 
@@ -209,12 +210,17 @@ def generate_docker_compose(scenario: dict[str, Any]) -> str:
         for p in participants
     ])
 
+    # Add BROWSER_HEADLESS environment variable from assessment settings
+    green_env = green.get("env", {}).copy()
+    if "headless" in assessment:
+        green_env["BROWSER_HEADLESS"] = str(assessment["headless"]).lower()
+
     all_services = ["green-agent"] + participant_names
 
     return COMPOSE_TEMPLATE.format(
         green_image=green["image"],
         green_port=DEFAULT_PORT,
-        green_env=format_env_vars(green.get("env", {})),
+        green_env=format_env_vars(green_env),
         green_depends=format_depends_on(participant_names),
         participant_services=participant_services,
         client_depends=format_depends_on(all_services)

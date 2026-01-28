@@ -199,7 +199,7 @@ class LLMClientFactory:
         
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"✓ Purple Agent LiteLLM: Creating LitellmModel with model='{model_name}'")
+        # LitellmModel created (verbose logging disabled)
         
         return LitellmModel(
             model=model_name,

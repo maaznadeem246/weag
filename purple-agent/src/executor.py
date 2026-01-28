@@ -93,11 +93,16 @@ class PurpleAgentExecutor(AgentExecutor):
                     id=assessment_trace_id,
                     name=f"purple_agent_task_{request.context_id[:8]}"
                 )
-                logger.info(f"✓ Purple Agent: Linked to unified trace {assessment_trace_id}")
+                # Trace linked (verbose logging disabled)
             except Exception as e:
                 logger.warning(f"Failed to link to unified trace: {e}")
 
-        logger.info(f"📨 Received task from Green Agent (context: {request.context_id})")
+        # Task received (verbose logging disabled)
+        
+        # Log message received from Green Agent
+        logger.info("="*50)
+        logger.info("⬇️  MESSAGE FROM GREEN AGENT")
+        logger.info(f"Context: {request.context_id}")
         
         try:
             # Extract text message from Green Agent
@@ -157,10 +162,7 @@ class PurpleAgentExecutor(AgentExecutor):
                 await event_queue.enqueue_event(error_msg)
                 return
             
-            logger.info(
-                f"Agent execution complete: success={self._context.task_complete}, "
-                f"reward={self._context.final_reward}"
-            )
+            # Agent execution complete (verbose logging disabled)
             
             # Cleanup MCP connections
             if self._context.mcp_registry:
@@ -225,7 +227,14 @@ class PurpleAgentExecutor(AgentExecutor):
             # Try sending final message with retry and robust logging to avoid unhandled connection resets
             try:
                 await event_queue.enqueue_event(final_message)
-                logger.info(f"✅ Sent result to Green Agent: Success={self._context.task_complete}, Score={self._context.final_reward}")
+                # Log result sent
+                logger.info("="*50)
+                logger.info("⬆️  RESULT SENT TO GREEN AGENT")
+                logger.info(f"Task: {self._context.task_id}")
+                logger.info(f"Success: {self._context.task_complete}")
+                logger.info(f"Score: {self._context.final_reward:.2f}")
+                logger.info(f"Actions: {self._context.actions_taken}")
+                logger.info("="*50)
             except Exception as e:
                 try:
                     await asyncio.sleep(0.2)

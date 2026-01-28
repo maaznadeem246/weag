@@ -13,7 +13,7 @@
   "results": [
     {
       "mode": "multi",
-      "run_id": "eval_44f615b2_1768495981",
+      "run_id": "eval_70ddb07d_1768596392",
       "orchestrated_by_llm": true,
       "total_tasks": 4,
       "passed_tasks": 1,
@@ -44,8 +44,8 @@
             "observations": 0,
             "mcp_calls": 0
           },
-          "start_time": "2026-01-15T16:55:21.718034",
-          "end_time": "2026-01-15T16:55:41.886832",
+          "start_time": "2026-01-16T20:48:25.780523",
+          "end_time": "2026-01-16T20:48:46.052134",
           "completion_time": 0.0,
           "error": "Inactivity timeout after 20.2s"
         },
@@ -65,8 +65,8 @@
             "observations": 0,
             "mcp_calls": 0
           },
-          "start_time": "2026-01-15T16:55:55.631829",
-          "end_time": "2026-01-15T16:55:55.631829",
+          "start_time": "2026-01-16T20:49:02.615372",
+          "end_time": "2026-01-16T20:49:02.630554",
           "completion_time": 0.0,
           "error": null
         },
@@ -86,10 +86,10 @@
             "observations": 0,
             "mcp_calls": 0
           },
-          "start_time": "2026-01-15T16:56:50.055075",
-          "end_time": "2026-01-15T16:56:58.194132",
+          "start_time": "2026-01-16T20:49:55.932534",
+          "end_time": "2026-01-16T20:50:03.954033",
           "completion_time": 0.0,
-          "error": "Inactivity timeout after 8.1s"
+          "error": "Inactivity timeout after 8.0s"
         },
         {
           "task_id": "assistantbench.test.0",
@@ -107,8 +107,8 @@
             "observations": 0,
             "mcp_calls": 0
           },
-          "start_time": "2026-01-15T16:58:18.636068",
-          "end_time": "2026-01-15T16:58:26.717849",
+          "start_time": "2026-01-16T20:51:01.195922",
+          "end_time": "2026-01-16T20:51:09.324998",
           "completion_time": 0.0,
           "error": "Inactivity timeout after 8.1s"
         }
@@ -132,8 +132,8 @@
                 "observations": 0,
                 "mcp_calls": 0
               },
-              "start_time": "2026-01-15T16:55:21.718034",
-              "end_time": "2026-01-15T16:55:41.886832",
+              "start_time": "2026-01-16T20:48:25.780523",
+              "end_time": "2026-01-16T20:48:46.052134",
               "completion_time": 0.0,
               "error": "Inactivity timeout after 20.2s"
             },
@@ -153,8 +153,8 @@
                 "observations": 0,
                 "mcp_calls": 0
               },
-              "start_time": "2026-01-15T16:55:55.631829",
-              "end_time": "2026-01-15T16:55:55.631829",
+              "start_time": "2026-01-16T20:49:02.615372",
+              "end_time": "2026-01-16T20:49:02.630554",
               "completion_time": 0.0,
               "error": null
             },
@@ -174,10 +174,10 @@
                 "observations": 0,
                 "mcp_calls": 0
               },
-              "start_time": "2026-01-15T16:56:50.055075",
-              "end_time": "2026-01-15T16:56:58.194132",
+              "start_time": "2026-01-16T20:49:55.932534",
+              "end_time": "2026-01-16T20:50:03.954033",
               "completion_time": 0.0,
-              "error": "Inactivity timeout after 8.1s"
+              "error": "Inactivity timeout after 8.0s"
             },
             {
               "task_id": "assistantbench.test.0",
@@ -195,8 +195,8 @@
                 "observations": 0,
                 "mcp_calls": 0
               },
-              "start_time": "2026-01-15T16:58:18.636068",
-              "end_time": "2026-01-15T16:58:26.717849",
+              "start_time": "2026-01-16T20:51:01.195922",
+              "end_time": "2026-01-16T20:51:09.324998",
               "completion_time": 0.0,
               "error": "Inactivity timeout after 8.1s"
             }
@@ -205,6 +205,6 @@
       }
     }
   ],
-  "timestamp": "2026-01-15T21:58:26.723849",
-  "run_id": "eval_44f615b2_1768495981"
+  "timestamp": "2026-01-17T01:51:09.334257",
+  "run_id": "eval_70ddb07d_1768596392"
 }

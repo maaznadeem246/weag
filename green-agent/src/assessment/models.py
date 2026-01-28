@@ -143,7 +143,7 @@ class AssessmentConfig:
     
     # Limits
     max_steps: int = 10
-    max_tool_calls: int = 12
+    max_tool_calls: int = 3
     timeout_seconds: int = 300
     
     # Participants

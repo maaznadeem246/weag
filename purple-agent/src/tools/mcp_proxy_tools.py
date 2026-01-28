@@ -37,8 +37,7 @@ def _log_observation_result(server_name: str, payload: Dict[str, Any]) -> None:
     else:
         summary["result_preview"] = str(result)[:200]
 
-    print(summary)
-    logger.info("Observation result received", extra=summary)
+    # Observation received (verbose logging disabled)
 
 
 async def connect_to_mcp(
@@ -104,22 +103,30 @@ async def connect_to_mcp(
             # However, we need to keep the connection open across tool calls,
             # so we manually enter the context managers and store them.
             
+            logger.info(f"🔌 Connecting to MCP server: {url}")
             http_cm = streamablehttp_client(url)
             try:
+                logger.info("  • Establishing HTTP transport...")
                 read, write, _ = await asyncio.wait_for(http_cm.__aenter__(), timeout=30.0)
+                logger.info("  ✓ HTTP transport established")
             except asyncio.TimeoutError:
+                logger.error("❌ HTTP transport connection timed out")
                 return {"error": "HTTP transport connection timed out"}
             except Exception as e:
-                logger.error(f"Failed to establish HTTP transport: {e}", exc_info=True)
+                logger.error(f"❌ Failed to establish HTTP transport: {e}", exc_info=True)
                 return {"error": f"HTTP transport failed: {e}"}
             
             # Now create and enter ClientSession context manager
+            logger.info("  • Creating MCP client session...")
             session_cm = ClientSession(read, write)
             try:
                 session = await asyncio.wait_for(session_cm.__aenter__(), timeout=30.0)
+                logger.info("  ✓ MCP client session created")
                 
                 # Initialize the MCP protocol
+                logger.info("  • Initializing MCP protocol handshake...")
                 await asyncio.wait_for(session.initialize(), timeout=30.0)
+                logger.info("✅ MCP connection successful!")
             except asyncio.TimeoutError:
                 # Cleanup HTTP transport
                 try:
@@ -325,9 +332,7 @@ async def call_mcp_tool(
                     if done or reward >= 1.0:
                         context.task_complete = True
                         context.final_reward = max(context.final_reward, reward)
-                        logger.info(
-                            f"Task completed! reward={context.final_reward}, done={done}"
-                        )
+                        logger.info(f"Task completed: reward={context.final_reward}")
             
             # Increment actions taken
             context.actions_taken += len(results_list)

@@ -110,10 +110,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_GREEN_PORT = 9009
 DEFAULT_PURPLE_PORT = 9010
 
-# Default maximum tasks per benchmark (matches Green Agent's default)
-# When TOML config doesn't specify max_tasks_per_benchmark, this value is used
-DEFAULT_MAX_TASKS_PER_BENCHMARK = 2
-
 
 class AgentProcess:
     """
@@ -165,12 +161,12 @@ class AgentProcess:
         system = platform.system()
         
         if system == "Windows":
-            # Build environment variable setup commands
+            # Build environment variable setup commands for nested terminal
             env_setup = ""
             if env:
                 for key, value in env.items():
-                    # Escape for command line
-                    escaped_value = value.replace('"', '\\"')
+                    # Escape special characters for cmd.exe
+                    escaped_value = value.replace('"', '""').replace('%', '%%').replace('&', '^&')
                     env_setup += f'set "{key}={escaped_value}" && '
             
             # Activate venv if it exists
@@ -182,7 +178,7 @@ class AgentProcess:
             if venv_path.exists():
                 venv_activate = f'call "{venv_path}" && '
             
-            # Build command to run agent
+            # Build command to run agent (set env vars THEN run command)
             full_command = f'{env_setup}{venv_activate}cd /d "{work_dir}" && {cmd_str} && echo. && echo Agent terminated. Press any key to close... && pause >nul'
             
             # Try Windows Terminal first (opens new tab in same window)
@@ -195,14 +191,16 @@ class AgentProcess:
                         "--title", f"{self.name}",
                         "cmd.exe", "/k", full_command
                     ],
+                    env=proc_env,  # Also pass to wt.exe itself (for inheritance)
                     cwd=str(work_dir)
                 )
             except FileNotFoundError:
-                # Fallback to cmd.exe in new window
+                # Fallback to cmd.exe in new window with CREATE_NEW_CONSOLE
                 self.process = subprocess.Popen(
-                    ["cmd.exe", "/c", f'start "{self.name}" cmd.exe /k "{full_command}"'],
+                    ["cmd.exe", "/k", full_command],
+                    env=proc_env,  # Pass merged environment to subprocess
                     cwd=str(work_dir),
-                    shell=True
+                    creationflags=subprocess.CREATE_NEW_CONSOLE
                 )
         else:
             # Linux/Mac: use gnome-terminal, xterm, or osascript
@@ -306,10 +304,8 @@ class KickstartOrchestrator:
 
         # Apply TOML headless setting (default: True, user can set false in TOML)
         # CLI --visible flag overrides TOML to show browser
-        # Read from [config] section first (new format), fallback to [assessment] (old format)
-        config_section = self._assessment_config.get("config", {})
         assessment_cfg = self._assessment_config.get("assessment", {})
-        toml_headless = config_section.get("headless", assessment_cfg.get("headless", True))  # Default headless=True
+        toml_headless = assessment_cfg.get("headless", True)  # Default headless=True
         # --visible CLI flag forces visible mode, otherwise use TOML setting
         self.args.headless = not self.args.visible and toml_headless
 
@@ -516,7 +512,9 @@ class KickstartOrchestrator:
             logger.info(f"Setting BROWSER_HEADLESS={env['BROWSER_HEADLESS']} (headless mode: {self.args.headless})")
 
             # Per-agent env overrides from assessment config
-            env.update(_extract_agent_env(self._assessment_config, "green_agent"))
+            toml_env = _extract_agent_env(self._assessment_config, "green_agent")
+            logger.info(f"TOML env vars for green_agent: {toml_env}")
+            env.update(toml_env)
             
             # Start subprocess (may fail if port in use - T059)
             try:
@@ -528,6 +526,7 @@ class KickstartOrchestrator:
                 if not green_python.exists():
                     # Fallback to system python if venv not found
                     green_python = Path("python")
+                logger.info(f"Final env vars for Green Agent: GREEN_LLM_PROVIDER={env.get('GREEN_LLM_PROVIDER')}, GREEN_OPENROUTER_API_KEY={bool(env.get('GREEN_OPENROUTER_API_KEY'))}")
                 self.green_agent.start(
                     command=[str(green_python), "-m", "src.main", "--host", "127.0.0.1", "--port", str(port)],
                     env=env,
@@ -606,7 +605,27 @@ class KickstartOrchestrator:
             }
 
             # Per-agent env overrides from assessment config
-            env.update(_extract_agent_env(self._assessment_config, "purple_agent"))
+            # First try [[participants]] array, then fallback to purple_agent key
+            participants = self._assessment_config.get("participants", [])
+            if participants and isinstance(participants, list) and len(participants) > 0:
+                participant_env = _dictify(participants[0].get("env"))
+                if participant_env:
+                    # Substitute ${VAR_NAME} with actual environment variable values
+                    import re
+                    for key, value in participant_env.items():
+                        if value is None:
+                            continue
+                        value_str = str(value)
+                        def replace_env_var(match):
+                            var_name = match.group(1)
+                            return os.environ.get(var_name, "")
+                        value_str = re.sub(r'\$\{([^}]+)\}', replace_env_var, value_str)
+                        env[str(key)] = value_str
+            else:
+                # Fallback to purple_agent key (old structure)
+                env.update(_extract_agent_env(self._assessment_config, "purple_agent"))
+            
+            logger.info(f"TOML env vars for purple_agent: PURPLE_LLM_PROVIDER={env.get('PURPLE_LLM_PROVIDER')}, PURPLE_OPENROUTER_API_KEY={bool(env.get('PURPLE_OPENROUTER_API_KEY'))}")
             
             # Add Langfuse credentials and trace context for unified tracing
             if os.environ.get("LANGFUSE_PUBLIC_KEY"):
@@ -697,24 +716,14 @@ class KickstartOrchestrator:
             # If empty, Green Agent will use its DEFAULT_EVALUATION_BENCHMARKS
             benchmarks = plan.get("benchmarks", [])
             tasks_by_benchmark = plan.get("tasks_by_benchmark", {})
-            
-            # Check if tasks_by_benchmark has any actual tasks
-            has_explicit_tasks = any(len(tasks) > 0 for tasks in tasks_by_benchmark.values())
+            max_tasks = plan.get("max_tasks_per_benchmark", 5)
             
             config.update({
                 "mode": "multi",
                 "benchmarks": benchmarks,  # Can be empty - Green Agent will use defaults
+                "tasks_by_benchmark": tasks_by_benchmark,  # Can be empty - Green Agent will discover
+                "max_tasks_per_benchmark": max_tasks,
             })
-            
-            # Only pass tasks_by_benchmark if there are explicit tasks
-            # Otherwise, Green Agent will auto-discover tasks
-            if has_explicit_tasks:
-                config["tasks_by_benchmark"] = tasks_by_benchmark
-            
-            # Only include max_tasks_per_benchmark if explicitly set in TOML
-            # Otherwise, Green Agent will use its DEFAULT_MAX_TASKS_PER_BENCHMARK
-            if "max_tasks_per_benchmark" in plan:
-                config["max_tasks_per_benchmark"] = plan["max_tasks_per_benchmark"]
         
         # Build evaluation request payload
         eval_request = {
@@ -1327,13 +1336,35 @@ def _extract_benchmarks(toml_data: Dict[str, Any]) -> list[Dict[str, Any]]:
 
 
 def _extract_agent_env(toml_data: Dict[str, Any], agent_key: str) -> Dict[str, str]:
+    """
+    Extract environment variables from TOML config and substitute ${VAR_NAME} placeholders.
+    
+    Example:
+        TOML: GREEN_OPENAI_API_KEY = "${OPENAI_API_KEY}"
+        .env: OPENAI_API_KEY=sk-...
+        Result: GREEN_OPENAI_API_KEY=sk-...
+    """
+    import re
+    
     agent_cfg = _dictify(toml_data.get(agent_key))
     env_cfg = _dictify(agent_cfg.get("env"))
     result: Dict[str, str] = {}
+    
     for key, value in env_cfg.items():
         if value is None:
             continue
-        result[str(key)] = str(value)
+        
+        value_str = str(value)
+        
+        # Substitute ${VAR_NAME} with actual environment variable values
+        # Pattern: ${VAR_NAME} -> os.environ.get("VAR_NAME", "")
+        def replace_env_var(match):
+            var_name = match.group(1)
+            return os.environ.get(var_name, "")
+        
+        value_str = re.sub(r'\$\{([^}]+)\}', replace_env_var, value_str)
+        result[str(key)] = value_str
+    
     return result
 
 
@@ -1373,13 +1404,12 @@ def _kickstart_resolve_task_plan(project_root: Path, toml_data: Dict[str, Any]) 
     When no [[benchmarks]] sections are defined in TOML, returns empty benchmarks list.
     The Green Agent will then use its DEFAULT_EVALUATION_BENCHMARKS.
     """
-    # Read from [config] section first (new format), fallback to [assessment] (old format)
-    config_section = _dictify(toml_data.get("config"))
+    # Try both 'config' and 'assessment' keys for backwards compatibility
+    config_cfg = _dictify(toml_data.get("config"))
     assessment_cfg = _dictify(toml_data.get("assessment"))
-    # Try config section first, then assessment section, finally use DEFAULT_MAX_TASKS_PER_BENCHMARK
     default_max = _coalesce_int(
-        config_section.get("max_tasks_per_benchmark") or assessment_cfg.get("max_tasks_per_benchmark"),
-        DEFAULT_MAX_TASKS_PER_BENCHMARK
+        config_cfg.get("max_tasks_per_benchmark") or assessment_cfg.get("max_tasks_per_benchmark"),
+        5
     )
 
     benchmarks_cfg = _extract_benchmarks(toml_data)

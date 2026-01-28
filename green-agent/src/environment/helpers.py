@@ -134,8 +134,8 @@ def get_browser_headless_mode() -> bool:
     headless_env = os.environ.get("BROWSER_HEADLESS")
     
     if headless_env is None:
-        logger.info("BROWSER_HEADLESS not set, defaulting to headless=False (visible)")
-        return False
+        logger.info("BROWSER_HEADLESS not set, defaulting to headless=True (production-safe)")
+        return True  # Default to headless for cloud/CI environments
     
     # Accept common truthy/falsey values
     headless = str(headless_env).lower() not in ("0", "false", "no", "off")

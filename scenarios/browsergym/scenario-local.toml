@@ -44,17 +44,8 @@ cmd = "python -m src.green_agent.main --host 127.0.0.1 --port 9009"
 
 # Environment variables - API keys injected from .env or GitHub Actions secrets
 # Use ${VAR_NAME} syntax for dynamic injection (GitHub Actions, CI/CD)
-env = {
-    GREEN_LLM_PROVIDER = "openai",
-    GREEN_OPENAI_MODEL = "gpt-4o",
-    GREEN_OPENAI_API_KEY = "${OPENAI_API_KEY}",
-    # GREEN_GEMINI_MODEL = "gemini-2.5-flash",
-    # GREEN_GEMINI_API_KEY = "${GEMINI_API_KEY}",
-    # GREEN_LITELLM_MODEL = "google/gemini-2.0-flash-exp:free",
-    # GREEN_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}",
-    # LANGFUSE_PUBLIC_KEY = "${LANGFUSE_PUBLIC_KEY}",
-    # LANGFUSE_SECRET_KEY = "${LANGFUSE_SECRET_KEY}",
-}
+# IMPORTANT: Inline tables must be on ONE line with NO comments inside
+env = { GREEN_LLM_PROVIDER = "litellm", GREEN_LITELLM_MODEL = "google/gemini-2.5-pro", GREEN_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}" }
 
 # =============================================================================
 # PURPLE AGENT (Participant) - Configure endpoint and model here
@@ -72,38 +63,14 @@ cmd = "python -m src.purple_agent.main --port 9010"
 
 # Environment variables - API keys injected from .env or GitHub Actions secrets
 # Use ${VAR_NAME} syntax for dynamic injection (GitHub Actions, CI/CD)
-env = {
-    PURPLE_LLM_PROVIDER = "openai",
-    PURPLE_OPENAI_MODEL = "gpt-4o",
-    PURPLE_OPENAI_API_KEY = "${OPENAI_API_KEY}",
-    # PURPLE_GEMINI_MODEL = "gemini-2.5-flash",
-    # PURPLE_GEMINI_API_KEY = "${GEMINI_API_KEY}",
-    # PURPLE_LITELLM_MODEL = "openai/gpt-oss-120b",
-    # PURPLE_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}",
-    # LANGFUSE_PUBLIC_KEY = "${LANGFUSE_PUBLIC_KEY}",
-    # LANGFUSE_SECRET_KEY = "${LANGFUSE_SECRET_KEY}",
-}
+# Note: Inline tables must be on ONE line with no comments
+env = { PURPLE_LLM_PROVIDER = "litellm", PURPLE_LITELLM_MODEL = "google/gemini-2.5-pro", PURPLE_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}" }
 
 # =============================================================================
 # BENCHMARKS CONFIGURATION
 # =============================================================================
 # Each [[benchmarks]] section defines a benchmark to evaluate.
-# 
-# Options:
-#   id        - Benchmark identifier (miniwob, assistantbench, webarena, etc.)
-#   max_tasks - Max tasks to run for THIS benchmark (overrides global max_tasks_per_benchmark)
-#   tasks     - OPTIONAL explicit task list. If OMITTED, auto-discovers available tasks!
-#
-# AUTO-DISCOVERY MODE (RECOMMENDED):
-#   Simply omit the `tasks` line - system will find all available tasks and limit by max_tasks
-#
-# SUPPORTED BENCHMARKS:
-#   - miniwob: Requires local dataset at benchmarks/miniwob/html/miniwob/
-#   - assistantbench: Auto-downloads from HuggingFace (no setup needed)
-#   - webarena: Requires Docker containers (WA_* env vars)
-#   - visualwebarena: Requires Docker containers (VWA_* env vars)
-#   - workarena: Requires ServiceNow dev instance (WORKARENA_* env vars)
-#   - weblinx: Requires dataset download (WEBLINX_DATA_PATH env var)
+
 
 # MiniWoB - Local HTML tasks (ready to use)
 # [[benchmarks]]
@@ -113,6 +80,7 @@ env = {
 # AssistantBench - HuggingFace tasks (ready to use)
 # [[benchmarks]]
 # id = "assistantbench"
+# Uses global max_tasks_per_benchmark
 
 # WebArena - Requires Docker setup (comment out if not available)
 # [[benchmarks]]

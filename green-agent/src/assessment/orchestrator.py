@@ -41,11 +41,24 @@ _mcp_server_port: int = 8001
 def _get_mcp_url() -> str:
     """Get MCP URL for Purple Agent connection.
     
-    Checks MCP_EXTERNAL_URL env var (for Docker), otherwise uses localhost.
+    Auto-detects Docker environment and uses appropriate hostname.
+    Priority: Explicit MCP_EXTERNAL_URL > Auto-detect Docker > localhost
     """
+    from src.utils.docker_detection import is_running_in_docker
+    
+    # Priority 1: Explicit external URL from env var
     external_url = os.environ.get("MCP_EXTERNAL_URL")
     if external_url:
         return external_url
+    
+    # Priority 2: Auto-detect Docker and use container name
+    if is_running_in_docker():
+        # Purple Agent connects to Green Agent via container name (not localhost)
+        mcp_url = f"http://green-agent:{_mcp_server_port}/mcp"
+        logger.info(f"🐳 Docker detected - using MCP URL: {mcp_url}")
+        return mcp_url
+    
+    # Priority 3: Default to localhost for local development
     return f"http://localhost:{_mcp_server_port}/mcp"
 
 
@@ -90,7 +103,6 @@ class AssessmentOrchestrator:
             **extra_fields: Additional fields to include in status dict
         """
         if not self._active_sessions:
-            logger.warning(f"⚠️ _update_status called but _active_sessions is empty (state={state})")
             return  # No-op if module not loaded yet
         
         run_id = self._assessment.run_id
@@ -111,7 +123,7 @@ class AssessmentOrchestrator:
         }
         
         self._active_sessions[run_id] = status_entry
-        logger.info(f"📊 Status updated: run_id={run_id}, state={state}, sessions_count={len(self._active_sessions)}")
+        logger.debug(f"Status update: {state} - {status_entry['progress']}")
 
     
     async def run(self) -> Dict[str, Any]:
@@ -157,9 +169,6 @@ class AssessmentOrchestrator:
             # Final status update
             self._update_status("complete", result=artifact)
             
-            # Emit A2A artifact
-            await self._emit_artifact(artifact)
-            
             logger.info(f"✅ Assessment orchestration complete: {assessment.get_passed_count()}/{assessment.total_tasks} passed")
             logger.info("✅ About to return from run() - finally block will execute cleanup")
             return artifact
@@ -178,171 +187,6 @@ class AssessmentOrchestrator:
             # Cleanup always runs
             logger.info("🧹 Finally block reached - starting cleanup")
             await self._cleanup()
-    
-    async def _emit_artifact(self, artifact: Optional[Dict[str, Any]]) -> None:
-        """
-        Emit A2A artifact for AgentBeats platform compatibility.
-        
-        Pattern: Direct await in run() method (like tau2 evaluator).
-        AgentBeats collects artifacts via A2A streaming for leaderboard.
-        
-        Args:
-            artifact: Assessment result artifact dict
-        """
-        # Debug logging to diagnose which value is None
-        logger.info(f"📤 _emit_artifact called: artifact={artifact is not None}, task_updater={self._context.task_updater is not None}")
-        
-        if not artifact:
-            logger.warning("⚠️ Cannot emit artifact: artifact is None")
-            return
-        if not self._context.task_updater:
-            logger.warning("⚠️ Cannot emit artifact: task_updater is None - will write results to file instead")
-            # Fallback: Write results to file for local testing
-            await self._write_results_to_file(artifact)
-            return
-        
-        try:
-            from a2a.types import DataPart, Part, TextPart
-            
-            # Format summary text like tau2 benchmark example
-            summary = self._format_summary_text(artifact)
-            
-            # Emit artifact (AgentBeats collects via A2A streaming)
-            await self._context.task_updater.add_artifact(
-                parts=[
-                    Part(root=TextPart(text=summary)),
-                    Part(root=DataPart(data=artifact)),
-                ],
-                name="Result",
-            )
-            logger.info("✅ A2A artifact emitted successfully")
-            
-            # Also write to file for local testing
-            await self._write_results_to_file(artifact)
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to emit A2A artifact: {e}", exc_info=True)
-            # Fallback to file on error
-            await self._write_results_to_file(artifact)
-    
-    def _format_summary_text(self, artifact: Dict[str, Any]) -> str:
-        """
-        Format summary text like tau2 benchmark example.
-        
-        Returns:
-            Formatted summary string for A2A artifact TextPart
-        """
-        mode = artifact.get("mode", "single")
-        task_results = artifact.get("task_results", [])
-        
-        # Format task results for display (like tau2)
-        task_results_str = "\n".join(
-            f"  {t.get('task_id', 'unknown')}: {'✓' if t.get('success', False) else '✗'} ({t.get('final_reward', 0):.2f})"
-            for t in task_results
-        ) if task_results else "  No tasks completed"
-        
-        if mode == "multi":
-            total = artifact.get("total_tasks", 0)
-            passed = artifact.get("passed_tasks", 0)
-            pass_rate = artifact.get("success_rate", 0) * 100
-            time_used = artifact.get("total_latency_ms", 0) / 1000
-            benchmarks = ", ".join(artifact.get("benchmarks", ["unknown"]))
-            
-            summary = f"""BrowserGym Assessment Results
-Benchmarks: {benchmarks}
-Tasks: {total}
-Pass Rate: {pass_rate:.1f}% ({passed}/{total})
-Time: {time_used:.1f}s
-
-Task Results:
-{task_results_str}"""
-        else:
-            task_success = artifact.get("task_success", False)
-            task_id = artifact.get("task_id", "unknown")
-            score = artifact.get("final_score", 0)
-            time_used = artifact.get("time_used", 0)
-            
-            summary = f"""BrowserGym Assessment Results
-Task: {task_id}
-Success: {'✓ PASS' if task_success else '✗ FAIL'}
-Score: {score:.4f}
-Time: {time_used:.1f}s
-
-Task Results:
-  {task_id}: {'✓' if task_success else '✗'} ({score:.2f})"""
-        
-        return summary
-    
-    async def _write_results_to_file(self, artifact: Dict[str, Any]) -> None:
-        """
-        Write results to file for local testing (fallback when task_updater unavailable).
-        
-        Creates results/agentbeats-results-{date}.json in project root.
-        """
-        import json
-        from datetime import datetime
-        from pathlib import Path
-        
-        try:
-            # Get project root (green-agent directory)
-            project_root = Path(__file__).parent.parent.parent
-            results_dir = project_root / "results"
-            results_dir.mkdir(exist_ok=True)
-            
-            # Create timestamped filename
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            results_file = results_dir / f"agentbeats-results-{timestamp}.json"
-            
-            # Get purple agent info from context
-            purple_agent_url = str(self._context.purple_agent_url) if self._context.purple_agent_url else "unknown"
-            purple_agent_id = self._context.purple_agent_id or "purple_agent"
-            participants_map = self._context.participants or {}
-            
-            # Build participants dict with purple agent info
-            participants = {
-                "green_agent": {
-                    "name": "weag-green-agent",
-                    "role": "evaluator",
-                },
-            }
-            
-            # Add purple agents from participants map
-            for role, url in participants_map.items():
-                participants[role] = {
-                    "name": role,
-                    "url": url,
-                    "role": "participant",
-                }
-            
-            # If no participants in map, use primary purple agent
-            if not participants_map:
-                participants["purple_agent"] = {
-                    "name": purple_agent_id,
-                    "url": purple_agent_url,
-                    "role": "participant",
-                }
-            
-            # Format as AgentBeats expects
-            results_data = {
-                "participants": participants,
-                "results": [artifact],
-                "timestamp": datetime.now().isoformat(),
-                "run_id": artifact.get("run_id", "unknown"),
-            }
-            
-            with open(results_file, "w") as f:
-                json.dump(results_data, f, indent=2)
-            
-            logger.info(f"✅ Results written to file: {results_file}")
-            
-            # Also print summary to console like tau2 example
-            summary = self._format_summary_text(artifact)
-            print(f"\n{'='*60}")
-            print(summary)
-            print(f"{'='*60}\n")
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to write results to file: {e}", exc_info=True)
     
     async def _initialize_mcp_server(self) -> None:
         """Initialize MCP server for the assessment."""
@@ -755,4 +599,8 @@ def start_orchestrator(assessment: Assessment, context: AgentContext, active_ses
     """
     orchestrator = AssessmentOrchestrator(assessment, context, active_sessions)
     task = asyncio.create_task(orchestrator.run())
+    assessment.set_orchestrator_running(task)
+    return task
 
+
+__all__ = ["AssessmentOrchestrator", "start_orchestrator"]

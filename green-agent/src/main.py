@@ -74,6 +74,7 @@ from src.benchmarks import (
     validate_assessment_config,
     DEFAULT_EVALUATION_BENCHMARKS,
 )
+from src.benchmarks.profiles import detect_benchmark
 from src.assessment import Assessment, AssessmentConfig
 from src.a2a.artifact_helpers import (
     get_metrics_from_state,
@@ -182,15 +183,18 @@ class BrowserGymGreenAgent:
         explicit_mode = cfg.get("mode")
         explicit_task_id = cfg.get("task_id")  # Only explicit task_id, no fallback
         benchmarks_in_cfg = cfg.get("benchmarks")  # Check if benchmarks array provided
+        max_tasks_per_benchmark = cfg.get("max_tasks_per_benchmark")  # Check if max_tasks is set
         
         # Determine if truly multi-task:
         # - Explicit mode="multi" (with or without tasks_by_benchmark), OR
         # - tasks_by_benchmark dict present, OR
-        # - benchmarks array present without explicit task_id
+        # - benchmarks array present without explicit task_id, OR
+        # - max_tasks_per_benchmark is set WITHOUT explicit task_id (auto-discover mode)
         is_multi = (
             explicit_mode == "multi"
             or isinstance(tasks_by_benchmark, dict)
             or (isinstance(benchmarks_in_cfg, list) and benchmarks_in_cfg and not explicit_task_id)
+            or (max_tasks_per_benchmark is not None and not explicit_task_id)  # NEW: Auto-discover if max_tasks is set
         )
         
         # Now apply defaults based on mode
@@ -208,13 +212,13 @@ class BrowserGymGreenAgent:
         if env_purple_url:
             primary_purple_url = env_purple_url
             participants_map["purple_agent"] = env_purple_url
-            logger.info(f"Using PURPLE_AGENT_URL from environment: {env_purple_url}")
+            # Purple URL configured (verbose logging disabled)
         
         # Extract purple_agent_id
         primary_purple_parsed = httpx.URL(primary_purple_url)
         purple_agent_id = primary_purple_parsed.path.strip("/").split("/")[-1] or run_id[:8]
         
-        logger.info(f"🔧 Setting up context: {task_id} (multi={is_multi}, explicit_mode={explicit_mode}, tasks_by_benchmark={bool(tasks_by_benchmark)})")
+        # Context setup (verbose logging disabled)
         
         # Check if tasks_by_benchmark has actual tasks (not just empty lists)
         has_explicit_tasks = (
@@ -238,15 +242,14 @@ class BrowserGymGreenAgent:
             
             # Discover tasks for each benchmark
             from src.benchmarks import discover_tasks_for_benchmark
-            from src.benchmarks.constants import DEFAULT_MAX_TASKS_PER_BENCHMARK
-            max_tasks_per_benchmark = cfg.get("max_tasks_per_benchmark", DEFAULT_MAX_TASKS_PER_BENCHMARK)
+            max_tasks_per_benchmark = cfg.get("max_tasks_per_benchmark", 5)
             tasks_by_benchmark = {}
             
             for benchmark_id in benchmarks_list:
                 try:
                     discovered = discover_tasks_for_benchmark(benchmark_id, max_tasks_per_benchmark)
                     tasks_by_benchmark[benchmark_id] = discovered
-                    logger.info(f"✓ Discovered {len(discovered)} tasks for {benchmark_id}")
+                    # Discovered tasks (verbose logging disabled)
                 except Exception as e:
                     logger.warning(f"Failed to discover tasks for {benchmark_id}: {e}")
                     tasks_by_benchmark[benchmark_id] = []
@@ -295,7 +298,7 @@ class BrowserGymGreenAgent:
             assessment_tracker=assessment,
         )
         
-        logger.info(f"✓ Context created: {assessment.total_tasks} tasks, purple_url={primary_purple_url}")
+        # Context created (verbose logging disabled)
         return context
     
     async def run_eval(self, req: EvalRequest, updater: TaskUpdater) -> None:
@@ -403,7 +406,13 @@ class BrowserGymGreenAgent:
         primary_purple_parsed = httpx.URL(primary_purple_url)
         purple_agent_id = primary_purple_parsed.path.strip("/").split("/")[-1] or context_id[:8]
 
-        logger.info(f"🚀 Starting evaluation: {task_id} (benchmark: {benchmark})")
+        # Log task start
+        logger.info("-" * 60)
+        logger.info(f"TASK STARTED: {task_id}")
+        logger.info(f"Benchmark: {benchmark}")
+        logger.info(f"Max Steps: {agent_context.max_steps}")
+        logger.info(f"Timeout: {agent_context.timeout_seconds}s")
+        logger.info("-" * 60)
         
         # Safe update helper that ignores terminal-state race conditions
         async def safe_update_status(state, message):
@@ -428,9 +437,8 @@ class BrowserGymGreenAgent:
                         task_plan.extend(tasks_list)
                 else:
                     # Auto-discover tasks from available benchmarks
-                    from src.benchmarks.constants import DEFAULT_MAX_TASKS_PER_BENCHMARK
                     task_plan_data = create_assessment_task_plan(
-                        max_tasks_per_benchmark=cfg.get("max_tasks_per_benchmark", DEFAULT_MAX_TASKS_PER_BENCHMARK)
+                        max_tasks_per_benchmark=cfg.get("max_tasks_per_benchmark", 5)
                     )
                     benchmarks = task_plan_data["benchmarks"]
                     tasks_by_benchmark = task_plan_data["tasks_by_benchmark"]
@@ -470,6 +478,30 @@ class BrowserGymGreenAgent:
                 )
                 assessment = Assessment(assessment_config)
                 
+                # Log assessment start
+                logger.info("\n" + "="*70)
+                logger.info("🚀 ASSESSMENT STARTED")
+                logger.info(f"Run ID: {run_id}")
+                logger.info(f"Total Tasks: {assessment.total_tasks}")
+                logger.info(f"Benchmarks: {', '.join(benchmarks)}")
+                for bench, tasks in tasks_by_benchmark.items():
+                    logger.info(f"  • {bench}: {len(tasks)} tasks")
+                logger.info(f"Max Steps/Task: {assessment_config.max_steps}")
+                logger.info(f"Timeout: {assessment_config.timeout_seconds}s")
+                logger.info(f"Purple Agent: {primary_purple_url}")
+                logger.info("="*70 + "\n")
+                
+                # Log assessment start with details
+                logger.info("=" * 60)
+                logger.info("ASSESSMENT STARTED")
+                logger.info(f"Run ID: {run_id}")
+                logger.info(f"Total Tasks: {assessment.total_tasks}")
+                logger.info(f"Benchmarks: {', '.join(benchmarks)}")
+                logger.info(f"Max Steps: {assessment_config.max_steps}")
+                logger.info(f"Timeout: {assessment_config.timeout_seconds}s")
+                logger.info(f"Purple Agent: {primary_purple_url}")
+                logger.info("=" * 60)
+                
                 # Create agent context for multi-task orchestration
                 agent_context = AgentContext(
                     task_id="multi-task-orchestration",
@@ -489,7 +521,6 @@ class BrowserGymGreenAgent:
                     error_message=None,
                     shared_state_manager=None,  # Will be created in agent tools
                     task_updater=updater,
-                    active_sessions=_active_sessions,  # For status endpoint updates
                     start_time=start_time,
                     timeout_seconds=cfg.get("timeout_seconds", 300),
                     background_monitor_interval=3.0,
@@ -514,7 +545,7 @@ class BrowserGymGreenAgent:
                 max_turns_per_prompt = int(os.getenv("GREEN_MAX_TURNS_PER_PROMPT", "10"))
                 
                 try:
-                    logger.info(f"🔄 Starting multi-task loop for {len(task_plan)} tasks")
+                    # Starting multi-task loop (verbose logging disabled)
                     
                     # Create activity watchdog with differentiated timeouts:
                     # - 20s initial timeout (before first interaction - browser setup)
@@ -523,12 +554,12 @@ class BrowserGymGreenAgent:
                         timeout_seconds=8.0,         # Pulse timeout after first interaction
                         first_task_timeout=20.0      # Initial timeout until first real interaction
                     )
-                    logger.info("✓ Created ActivityWatchdog (20s initial, 8s after first interaction)")
+                    # ActivityWatchdog created (verbose logging disabled)
                     
                     # Create in-memory session for conversation history
                     multi_task_session_id = str(uuid4())
                     session = create_session(session_id=multi_task_session_id, use_persistent=False)
-                    logger.info("✓ Created in-memory session for conversation history")
+                    # Session created (verbose logging disabled)
                     
                     # Reuse agent instance already created at function start
                     
@@ -541,7 +572,7 @@ class BrowserGymGreenAgent:
                         f"CALL send_first_task_to_purple_agent() NOW to start task 1/{len(task_plan)}."
                     )
                     
-                    logger.info(f"🚀 [FLOW] Task 1/{len(task_plan)}: Prompting LLM to send_first_task_to_purple_agent()")
+                    # Task 1 flow (verbose logging disabled)
                     
                     # Use watchdog.track() context manager for clean activity tracking
                     try:
@@ -563,7 +594,7 @@ class BrowserGymGreenAgent:
                         first_task_id = task_plan[0]
                         if shared_state:
                             shared_state.mark_task_completed(success=False, reason="inactivity_timeout")
-                        logger.warning(f"✗ [FLOW] Task 1/{len(task_plan)} ({first_task_id}): status=inactivity_timeout, success=False")
+                        # Flow logging disabled (verbose)
                         
                         # Mark task as failed in assessment
                         from src.assessment import TaskStatus
@@ -581,7 +612,7 @@ class BrowserGymGreenAgent:
                         
                         # Continue to next task instead of crashing
                         current_task_index = 1
-                        logger.info(f"🔄 [FLOW] Setting current_task_index={current_task_index} and continuing to main loop")
+                        # Flow logging disabled (verbose)
                     
                     # Step 2: Loop through remaining tasks
                     # Loop structure: For each task index, wait for completion then send next
@@ -589,10 +620,10 @@ class BrowserGymGreenAgent:
                     
                     while True:
                         current_task_index = assessment.current_index
-                        logger.info(f"🔁 [FLOW] Loop start: current_task_index={current_task_index}")
+                        # Flow logging disabled (verbose)
                         
                         if current_task_index >= len(task_plan):
-                            logger.info("✅ [FLOW] All tasks completed - breaking loop")
+                            # Flow logging disabled (verbose)
                             break
                         
                         task_id_current = task_plan[current_task_index]
@@ -607,7 +638,7 @@ class BrowserGymGreenAgent:
                         if not task_was_sent:
                             # Task was NOT sent (e.g., timeout occurred before send completed)
                             # We need to SEND it now before waiting for it
-                            logger.info(f"📤 [FLOW] Task {current_task_index + 1}/{len(task_plan)}: Task not sent yet, prompting LLM to send_next_task_to_purple_agent({task_id_current})")
+                            # Flow logging disabled (verbose)
                             
                             send_prompt = (
                                 f"internal_system: Need to send task {current_task_index + 1}/{len(task_plan)} ({task_id_current}). "
@@ -644,9 +675,9 @@ class BrowserGymGreenAgent:
                                     )
                                     # Advance to next task - if no more tasks, break
                                     if not assessment.advance_to_next_task():
-                                        logger.info("✅ [FLOW] No more tasks after send failure - breaking loop")
+                                        # Flow logging disabled (verbose)
                                         break
-                                    logger.info(f"🔄 [FLOW] Setting current_task_index={assessment.current_index} and continuing to main loop")
+                                    # Flow logging disabled (verbose)
                                     continue
                                     
                             except (asyncio.TimeoutError, asyncio.CancelledError) as e:
@@ -655,7 +686,7 @@ class BrowserGymGreenAgent:
                                 # Mark task as failed and move to next
                                 if agent_context.shared_state_manager:
                                     agent_context.shared_state_manager.mark_task_completed(success=False, reason="send_timeout")
-                                logger.warning(f"✗ [FLOW] Task {current_task_index + 1}/{len(task_plan)} ({task_id_current}): Failed to send (timeout)")
+                                # Flow logging disabled (verbose)
                                 
                                 # Mark task as failed in assessment
                                 from src.assessment import TaskStatus
@@ -673,12 +704,12 @@ class BrowserGymGreenAgent:
                                 
                                 # Advance to next task in assessment - if no more tasks, break
                                 if not assessment.advance_to_next_task():
-                                    logger.info("✅ [FLOW] No more tasks after send attempt timeout - breaking loop")
+                                    # Flow logging disabled (verbose)
                                     break
-                                logger.info(f"🔄 [FLOW] Setting current_task_index={assessment.current_index} and continuing to main loop")
+                                # Flow logging disabled (verbose)
                                 continue
                         
-                        logger.info(f"⏳ [FLOW] Task {current_task_index + 1}/{len(task_plan)}: Prompting LLM to wait_for_purple_completion({task_id_current})")
+                        # Flow logging disabled (verbose)
                         
                         # Wait prompt: Tell LLM to call wait_for_purple_completion
                         wait_prompt = (
@@ -711,10 +742,7 @@ class BrowserGymGreenAgent:
                             # Mark task as failed and continue
                             if agent_context.shared_state_manager:
                                 agent_context.shared_state_manager.mark_task_completed(success=False, reason="inactivity_timeout")
-                            logger.warning(
-                                f"✗ [FLOW] Task {current_task_index + 1}/{len(task_plan)} "
-                                f"({task_id_current}): status=inactivity_timeout, success=False"
-                            )
+                            # Flow logging disabled (verbose)
                             
                             # Mark task as failed in assessment
                             from src.assessment import TaskStatus
@@ -732,9 +760,9 @@ class BrowserGymGreenAgent:
                             
                             # Advance to next task - if no more tasks, break
                             if not assessment.advance_to_next_task():
-                                logger.info("✅ [FLOW] No more tasks after inactivity timeout - breaking loop")
+                                # Flow logging disabled (verbose)
                                 break
-                            logger.info(f"🔄 [FLOW] Setting current_task_index={assessment.current_index} and continuing to main loop")
+                            # Flow logging disabled (verbose)
                             continue
                         
                         # Check task completion status from tracker
@@ -745,14 +773,14 @@ class BrowserGymGreenAgent:
                         
                         # Log task completion status
                         status_emoji = "✓" if last_task_success else "✗"
-                        logger.info(f"{status_emoji} [FLOW] Task {current_task_index + 1}/{len(task_plan)} ({task_id_current}): status={last_task_status}, success={last_task_success}")
+                        # Flow logging disabled (verbose)
                         
                         # Mark first task completion for ActivityWatchdog timeout adjustment
                         if current_task_index == 0:  # First task (0-indexed)
                             watchdog.mark_first_task_completed()
                         
                         if not last_task_completed:
-                            logger.warning(f"⚠️ [FLOW] Task {task_id_current} did not complete properly - recording as failed")
+                            # Flow logging disabled (verbose)
                             # Mark as failed in assessment
                             from src.assessment import TaskStatus
                             assessment.mark_task_completed(
@@ -770,13 +798,21 @@ class BrowserGymGreenAgent:
                         # Move to next task using tracker
                         assessment.advance_to_next_task()
                         next_index = assessment.current_index
-                        logger.info(f"➡️ [FLOW] Incremented current_task_index to {next_index}")
+                        # Flow logging disabled (verbose)
                         
                         # Check if there are more tasks to run
                         if next_index < len(task_plan):
                             next_task_id = task_plan[next_index]
+                            next_benchmark = detect_benchmark(next_task_id) or "unknown"
                             
-                            logger.info(f"📤 [FLOW] Task {next_index + 1}/{len(task_plan)}: Prompting LLM to send_next_task_to_purple_agent({next_task_id})")
+                            # Log task change
+                            logger.info("-"*70)
+                            logger.info(f"🔄 SWITCHING TO NEXT TASK ({next_index + 1}/{len(task_plan)})")
+                            logger.info(f"New Task: {next_task_id}")
+                            logger.info(f"Benchmark: {next_benchmark}")
+                            logger.info("-"*70)
+                            
+                            # Flow logging disabled (verbose)
                             next_prompt = (
                                 f"internal_system: Task {current_task_index + 1}/{len(task_plan)} ({task_id_current}) finished with status={last_task_status}. "
                                 f"CALL send_next_task_to_purple_agent() NOW to start task {next_index + 1}/{len(task_plan)} ({next_task_id})."
@@ -812,9 +848,9 @@ class BrowserGymGreenAgent:
                                     )
                                     # Advance to next task - if no more tasks, break
                                     if not assessment.advance_to_next_task():
-                                        logger.info("✅ [FLOW] No more tasks after send failure - breaking loop")
+                                        # Flow logging disabled (verbose)
                                         break
-                                    logger.info(f"🔄 [FLOW] Setting current_task_index={assessment.current_index} and continuing to main loop")
+                                    # Flow logging disabled (verbose)
                                     continue
                                     
                             except (asyncio.TimeoutError, asyncio.CancelledError) as e:
@@ -823,10 +859,7 @@ class BrowserGymGreenAgent:
                                 # Mark this task as failed due to timeout
                                 if agent_context.shared_state_manager:
                                     agent_context.shared_state_manager.mark_task_completed(success=False, reason="inactivity_timeout")
-                                logger.warning(
-                                    f"✗ [FLOW] Task {next_index + 1}/{len(task_plan)} "
-                                    f"({next_task_id}): status=inactivity_timeout, success=False"
-                                )
+                                # Flow logging disabled (verbose)
                                 
                                 # Mark task as failed in assessment
                                 assessment.mark_task_completed(
@@ -843,16 +876,16 @@ class BrowserGymGreenAgent:
                                 
                                 # Advance to next task - if no more tasks, break
                                 if not assessment.advance_to_next_task():
-                                    logger.info("✅ [FLOW] No more tasks after send timeout - breaking loop")
+                                    # Flow logging disabled (verbose)
                                     break
-                                logger.info(f"🔄 [FLOW] Setting current_task_index={assessment.current_index} and continuing to main loop")
+                                # Flow logging disabled (verbose)
                                 continue
                         else:
-                            logger.info("✅ [FLOW] All tasks sent and completed - breaking loop")
+                            # Flow logging disabled (verbose)
                             break
                     
                     # Step 3: Finalize assessment (programmatically, not via LLM)
-                    logger.info("Finalizing multi-task assessment...")
+                    # Finalizing assessment (verbose logging disabled)
                     
                     # Import and call finalize directly
                     from src.agent.tools.multi_task_tools import finalize_multi_task_assessment
@@ -863,40 +896,50 @@ class BrowserGymGreenAgent:
                     
                     final_results = assessment.get_results_summary()
                     
-                    # Build artifact data for AgentBeats platform
-                    artifact_data = {
-                        "mode": "multi",
-                        "run_id": run_id,
-                        "participants": final_results.get("participants", {}),
-                        "total_tasks": len(task_plan),
-                        "success_rate": assessment.get_success_rate(),
-                        "task_results": final_results.get("tasks", []),
-                        "pass_rate": assessment.get_success_rate(),
-                        "time_used": (datetime.now(timezone.utc) - start_time).total_seconds(),
-                        "max_score": len(task_plan),  # Max possible score = total tasks
-                    }
+                    # Log assessment completion
+                    success_count = sum(1 for t in assessment.results_by_task.values() if t.get("task_success"))
+                    total = len(task_plan)
+                    logger.info("\n" + "="*70)
+                    logger.info("✅ ASSESSMENT COMPLETED")
+                    logger.info(f"Run ID: {run_id}")
+                    logger.info(f"Total Tasks: {total}")
+                    logger.info(f"Successful: {success_count}/{total}")
+                    logger.info(f"Success Rate: {success_count/total*100:.1f}%")
+                    logger.info("\nTask Results:")
+                    for task_id, result in assessment.results_by_task.items():
+                        status = "✓" if result.get("task_success") else "✗"
+                        score = result.get("final_score", 0.0)
+                        benchmark = result.get("benchmark", "unknown")
+                        logger.info(f"  {status} {task_id} ({benchmark}): score={score:.2f}")
+                    logger.info("="*70 + "\n")
                     
                     _active_sessions[run_id] = {
                         "state": "complete",
                         "run_id": run_id,
                         "task_id": "multi",
-                        "result": artifact_data
+                        "result": {
+                            "mode": "multi",
+                            "run_id": run_id,
+                            "participants": final_results.get("participants", {}),
+                            "total_tasks": len(task_plan),
+                            "success_rate": assessment.get_success_rate(),
+                            "llm_orchestration": True,
+                        }
                     }
                     
-                    # CRITICAL: Emit A2A artifact for AgentBeats platform collection
-                    # This is how results.json is populated on the AgentBeats platform
-                    await updater.add_artifact(
-                        parts=[
-                            Part(root=TextPart(
-                                kind="text",
-                                text=f"Multi-task assessment completed: {assessment.get_passed_count()}/{len(task_plan)} tasks passed"
-                            )),
-                            Part(root=DataPart(kind="data", data=artifact_data))
-                        ],
-                        name="Result"
-                    )
-                    
-                    logger.info(f"✓ Multi-task assessment completed and artifact emitted: {len(task_plan)} tasks")
+                    # Log assessment completion with results
+                    success_count = sum(1 for t in assessment.results_by_task.values() if t.get("task_success"))
+                    logger.info("=" * 60)
+                    logger.info("ASSESSMENT COMPLETED")
+                    logger.info(f"Run ID: {run_id}")
+                    logger.info(f"Total Tasks: {len(task_plan)}")
+                    logger.info(f"Successful: {success_count}/{len(task_plan)}")
+                    logger.info(f"Success Rate: {success_count/len(task_plan)*100:.1f}%")
+                    for task_id, result in assessment.results_by_task.items():
+                        status = "✓" if result.get("task_success") else "✗"
+                        score = result.get("final_score", 0.0)
+                        logger.info(f"  {status} {task_id}: score={score:.2f}")
+                    logger.info("=" * 60)
                     
                 except Exception as e:
                     logger.error(f"Multi-task orchestration failed: {e}", exc_info=True)
@@ -908,7 +951,7 @@ class BrowserGymGreenAgent:
                         
                         ctx_wrapper = RunContextWrapper(context=agent_context)
                         finalization_result = await finalize_multi_task_assessment(ctx_wrapper)
-                        logger.info("✓ Finalized assessment with partial results after error")
+                        # Finalized with partial results (verbose logging disabled)
                     except Exception as fin_error:
                         logger.warning(f"Failed to finalize assessment: {fin_error}")
                     
@@ -1129,43 +1172,21 @@ class BrowserGymGreenAgent:
             # Generate final artifact from shared state (captures real metrics from MCP)
             try:
                 artifact = await self._generate_artifact(start_time)
-                artifact_data = artifact.model_dump()
                 
                 # Update session with artifact
                 if self._active_session:
-                    self._active_session.final_artifact = artifact_data
+                    self._active_session.final_artifact = artifact.model_dump()
                 
                 # Update active sessions for kickstart polling
                 _active_sessions[run_id] = {
                     "state": "complete",
                     "task_id": task_id,
-                    "result": artifact_data
+                    "result": artifact.model_dump()
                 }
                 
-                # CRITICAL: Emit A2A artifact for AgentBeats platform collection
-                # This is how results.json is populated on the AgentBeats platform
-                # The platform client collects artifacts via A2A streaming and writes them to results.json
-                await updater.add_artifact(
-                    parts=[
-                        Part(root=TextPart(
-                            kind="text",
-                            text=f"Evaluation completed: task_success={artifact.task_success}, score={artifact.final_score}"
-                        )),
-                        Part(root=DataPart(kind="data", data=artifact_data))
-                    ],
-                    name="Result"
-                )
-                
-                logger.info(
-                    "Evaluation artifact generated and emitted via A2A",
-                    extra={
-                        "task_id": task_id,
-                        "final_score": artifact.final_score,
-                        "task_success": artifact.task_success
-                    }
-                )
+                logger.info(f"Artifact generated: {task_id}, success={artifact.task_success}, score={artifact.final_score}")
             except Exception as artifact_error:
-                logger.warning(f"Failed to generate/emit artifact: {artifact_error}")
+                logger.warning(f"Failed to generate artifact: {artifact_error}")
             
         except Exception as e:
             logger.error(
@@ -1219,7 +1240,7 @@ class BrowserGymGreenAgent:
                 # Cleanup browser environment and MCP server
                 await self._cleanup_mcp_server()
                 
-                logger.info("Evaluation cleanup completed")
+                # Cleanup completed (verbose logging disabled)
             except Exception as cleanup_error:
                 logger.warning(f"Cleanup error (non-fatal): {cleanup_error}")
 
@@ -1686,14 +1707,7 @@ class BrowserGymGreenAgent:
                 "result": artifact.model_dump()
             }
             
-            logger.info(
-                "Evaluation completed successfully",
-                extra={
-                    "task_id": task_id,
-                    "final_score": artifact.final_score,
-                    "task_success": artifact.task_success
-                }
-            )
+            logger.info(f"Evaluation completed: {task_id}, success={artifact.task_success}, score={artifact.final_score}")
             
         except Exception as e:
             logger.error(
@@ -1782,13 +1796,13 @@ class BrowserGymGreenAgent:
                 
                 # Check for completion signals
                 if state.cleanup_called:
-                    logger.info("Cleanup signal received from Purple Agent")
+                    # Cleanup signal received (verbose logging disabled)
                     break
                 
                 # Check for task completion (done/truncated)
                 if state.task_completed and not task_completed_time:
                     task_completed_time = datetime.now(timezone.utc)
-                    logger.info("Task completed, waiting for cleanup signal...")
+                    # Waiting for cleanup (verbose logging disabled)
                 
                 # If task completed and no activity for N seconds, assume Purple disconnected
                 if task_completed_time:
@@ -1948,7 +1962,7 @@ class BrowserGymGreenAgent:
     
     async def _cleanup_mcp_server(self) -> None:
         """Cleanup MCP server subprocess, shared state, and related processes."""
-        logger.info("Starting comprehensive cleanup...")
+        # Starting cleanup (verbose logging disabled)
         
         # Cleanup MCP subprocess if managed by green agent
         if self._active_session and self._active_session.mcp_process:
@@ -1960,7 +1974,7 @@ class BrowserGymGreenAgent:
                 process.terminate()
                 try:
                     await asyncio.wait_for(process.wait(), timeout=5.0)
-                    logger.info("MCP server terminated gracefully")
+                    # MCP terminated (verbose logging disabled)
                 except asyncio.TimeoutError:
                     # Force kill if graceful termination fails
                     process.kill()
@@ -1983,7 +1997,7 @@ class BrowserGymGreenAgent:
                     if proc.info['name'] and 'python' in proc.info['name'].lower():
                         cmdline = proc.info.get('cmdline', [])
                         if cmdline and any('mcp_server' in arg for arg in cmdline):
-                            logger.info(f"Killing orphaned MCP server process: {proc.info['pid']}")
+                            # Killing orphaned MCP process (verbose logging disabled)
                             proc.kill()
                             proc.wait(timeout=3)
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
@@ -2007,23 +2021,14 @@ class BrowserGymGreenAgent:
             cleanup_result = session_manager.cleanup_session()
             browser_session_id = getattr(session_manager, 'current_session_id', None) or "unknown"
             green_session_id = self._active_session.session_id if self._active_session else "unknown"
-            logger.info(
-                f"✓ Browser environment cleaned up for session {browser_session_id}",
-                extra={
-                    "browser_session_id": browser_session_id,
-                    "green_agent_session_id": green_session_id,
-                    "cleanup_status": cleanup_result.get("cleanup_status"),
-                    "killed_pids": cleanup_result.get("killed_browser_pids", []),
-                    "orphaned_processes": cleanup_result.get("orphaned_processes", 0)
-                }
-            )
+            # Browser environment cleanup (verbose logging disabled)
         except Exception as e:
             logger.error(f"Error cleaning up browser session: {e}", exc_info=True)
             # Fallback: Try to cleanup all sessions as last resort
             try:
                 from src.mcp.server import session_manager
                 session_manager.cleanup_all_sessions()
-                logger.info("Fallback: cleaned up all sessions")
+                # Fallback cleanup completed (verbose logging disabled)
             except Exception as fallback_error:
                 logger.error(f"Fallback cleanup also failed: {fallback_error}")
         
@@ -2037,7 +2042,7 @@ class BrowserGymGreenAgent:
                 self._shared_state_manager = None
         
         self._evaluation_state = None
-        logger.info("Comprehensive cleanup completed")
+        # Comprehensive cleanup completed (verbose logging disabled)
 
 
 # =============================================================================
@@ -2071,7 +2076,7 @@ _active_sessions: Dict[str, Dict[str, Any]] = {}
 
 # Global MCP server state (on-demand initialization)
 _mcp_server_task: Optional[asyncio.Task] = None
-_mcp_server_port: int = 8001
+_mcp_server_port: int = int(os.environ.get("MCP_SERVER_PORT", "8001"))  # Configurable via env var
 _mcp_server_started: bool = False
 _mcp_external_url: Optional[str] = None  # External MCP URL for Docker networking
 
@@ -2079,13 +2084,27 @@ _mcp_external_url: Optional[str] = None  # External MCP URL for Docker networkin
 def get_mcp_url() -> str:
     """Get MCP URL for Purple Agent connection.
     
-    Uses external URL if configured (for Docker), otherwise uses localhost.
+    Auto-detects Docker environment and uses appropriate hostname.
+    Priority: Explicit MCP_EXTERNAL_URL > Auto-detect Docker > localhost
     
     Returns:
         MCP URL string (e.g., "http://green-agent:8001/mcp" or "http://localhost:8001/mcp")
     """
+    from src.utils.docker_detection import is_running_in_docker
+    
+    # Priority 1: Explicit external URL from env or CLI
     if _mcp_external_url:
         return _mcp_external_url
+    
+    # Priority 2: Auto-detect Docker and use container hostname
+    if is_running_in_docker():
+        # In Docker, Purple Agent connects to Green Agent via container name (not localhost)
+        # The container name is "green-agent" in docker-compose.yml
+        mcp_url = f"http://green-agent:{_mcp_server_port}/mcp"
+        # Docker detected - using MCP URL (verbose logging disabled)
+        return mcp_url
+    
+    # Priority 3: Default to localhost for local development
     return f"http://localhost:{_mcp_server_port}/mcp"
 
 
@@ -2174,6 +2193,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Run BrowserGym Green Agent A2A server")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind server")
     parser.add_argument("--port", type=int, default=9009, help="Port to bind server")
+    parser.add_argument("--mcp-port", type=int, default=int(os.environ.get("MCP_SERVER_PORT", "8001")), help="MCP server port")
     parser.add_argument("--card-url", type=str, help="External URL for agent card")
     parser.add_argument("--mcp-url", type=str, help="External MCP URL for Docker networking (e.g., http://green-agent:8001/mcp)")
     parser.add_argument("--headless", action="store_true", help="Run browser in headless mode")
@@ -2186,9 +2206,9 @@ async def main():
     if args.headless:
         os.environ["BROWSER_HEADLESS"] = "true"
     else:
-        # Default to false (visible) if not specified, but allow existing env var to take precedence
+        # Default to true (headless) if not specified, but allow existing env var to take precedence
         if "BROWSER_HEADLESS" not in os.environ:
-            os.environ["BROWSER_HEADLESS"] = "false"
+            os.environ["BROWSER_HEADLESS"] = "true"
     
     # Configure logging
     from src.utils.logging import setup_logging
@@ -2214,6 +2234,10 @@ async def main():
     
     agent_url = args.card_url or f"http://{args.host}:{args.port}/"
     _agent_url = agent_url  # Store globally for endpoint handlers
+    
+    # Set global MCP port from CLI argument
+    global _mcp_server_port
+    _mcp_server_port = args.mcp_port
     
     # Set global MCP URL for Docker networking support
     # Priority: CLI arg > Environment variable > Default localhost

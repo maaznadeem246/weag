@@ -53,7 +53,7 @@ OpenAIAgentsInstrumentor().instrument()
 try:
     langfuse = get_client()
     if langfuse.auth_check():
-        logger.info("✓ Green Agent: Langfuse client is authenticated and ready!")
+        pass  # Langfuse authenticated (verbose logging disabled)
     else:
         logger.warning("⚠ Green Agent: Langfuse authentication failed. Check your credentials.")
 except Exception as e:
@@ -64,7 +64,7 @@ except Exception as e:
 # This allows Green Agent to participate in the same trace started by kickstart script
 ASSESSMENT_TRACE_ID = os.environ.get("ASSESSMENT_TRACE_ID")
 if ASSESSMENT_TRACE_ID and langfuse:
-    logger.info(f"✓ Green Agent: Using unified trace context (trace_id: {ASSESSMENT_TRACE_ID})")
+    pass  # Unified trace context (verbose logging disabled)
 
 
 def create_evaluation_agent() -> Agent[AgentContext]:
@@ -88,7 +88,7 @@ def create_evaluation_agent() -> Agent[AgentContext]:
     """
     # Langfuse tracing is automatically handled by OpenInference instrumentation
     # Agent name "BrowserGymEvaluator" will be visible in Langfuse dashboard
-    logger.info("OpenInference instrumentation enabled for Green Agent")
+    # OpenInference instrumentation enabled (verbose logging disabled)
     
     # Configure to use Chat Completions API instead of Responses API
     # Gemini doesn't support Responses API, only Chat Completions
@@ -96,6 +96,7 @@ def create_evaluation_agent() -> Agent[AgentContext]:
     
     # Setup LLM client using abstraction layer (GREEN_ overrides allow per-agent config)
     llm_config = LLMConfig.from_env("GREEN_")
+    print(f"Using LLM provider:",llm_config)
     client, model, _ = setup_llm_client(llm_config, "GREEN_")
     
     # For OpenAI/Gemini, set the custom client as default
@@ -121,15 +122,7 @@ def create_evaluation_agent() -> Agent[AgentContext]:
     # Get display name for logging
     display_model = model_name if isinstance(model_name, str) else llm_config.litellm_model
     
-    logger.info(
-        "EvaluationAgent created",
-        extra={
-            "model": display_model,
-            "provider": llm_config.provider.value,
-            "max_iterations": llm_config.max_iterations,
-            "tools_count": len(AGENT_TOOLS),
-        }
-    )
+    # Agent created (verbose logging disabled)
     
     return agent
 

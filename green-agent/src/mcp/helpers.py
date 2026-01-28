@@ -143,12 +143,23 @@ def format_batch_result(
     """
     latency_ms = (datetime.utcnow() - start_time).total_seconds() * 1000
     
+    # Check if any action resulted in task completion
+    task_completed = any(r.get("done", False) for r in results)
+    final_reward = results[-1].get("reward", 0.0) if results else 0.0
+    
     result = {
         "results": results,
         "batch_id": batch_id,
         "latency_ms": latency_ms,
         "early_termination": early_termination,
+        # Clear top-level flags for Purple Agent to check
+        "task_completed": task_completed,
+        "final_reward": final_reward,
     }
+    
+    # Add explicit message when task is done
+    if task_completed:
+        result["message"] = "✅ TASK COMPLETED - Stop calling tools. Return your final answer."
     
     if error:
         result["error"] = error

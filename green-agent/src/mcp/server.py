@@ -88,12 +88,20 @@ class ActionDict(TypedDict, total=False):
     # Mouse
     button: Literal["left", "right", "middle"]
 
-# Initialize FastMCP server with disabled DNS rebinding protection for Docker
-# Docker internal hostnames (green-agent:8001, purple-agent:9010) would be blocked otherwise
-mcp = FastMCP(
-    "green_agent_mcp_server",
-    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False)
+# Configure transport security to allow Docker service names
+# Use wildcards to support dynamic port configuration
+transport_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=[
+        "localhost:*",       # Any port on localhost
+        "127.0.0.1:*",       # Any port on 127.0.0.1
+        "0.0.0.0:*",         # Any port on 0.0.0.0
+        "green-agent:*",     # Any port on Docker service name
+    ],
 )
+
+# Initialize FastMCP server with security settings
+mcp = FastMCP("green_agent_mcp_server", transport_security=transport_security)
 
 # Initialize tool registry with MCP server
 _tool_registry = get_tool_registry()
@@ -203,10 +211,10 @@ async def execute_actions(actions: list[ActionDict]) -> dict:
         # Log invocation summary in purple so it's easy to spot in terminal
         tool_count = shared_state.get_state().mcp_tool_invocations
         max_calls = shared_state.get_state().max_tool_calls
-        logger.info(_purple(f"MCP tool called: execute_actions, actions_count={len(actions)}, tool_call={tool_count}/{max_calls}"))
+        # Tool call logging disabled (verbose)
         
         # Log action payload for debugging
-        log_action_payload(actions, lambda msg: logger.info(_purple(msg)))
+        # Action payload logging disabled (verbose)
         
         # Check tool call limit BEFORE executing
         if shared_state.check_tool_limit():
@@ -263,6 +271,14 @@ async def execute_actions(actions: list[ActionDict]) -> dict:
             )
             for result in completed_batch.results
         ]
+        
+        # Log MCP tool execution results
+        logger.info(f"🛠️  MCP: execute_actions completed ({len(results)} actions)")
+        for idx, res in enumerate(completed_batch.results):
+            status_icon = "✅" if not res.error else "❌"
+            logger.info(f"  {status_icon} Action {idx+1}: done={res.done}, reward={res.reward:.2f}")
+            if res.error:
+                logger.error(f"    ⚠️ Error: {res.error}")
         
         return format_batch_result(
             results=results,
@@ -335,13 +351,27 @@ def get_observation(observation_mode: str = "axtree") -> dict:
     start_time = datetime.utcnow()
     
     if shared_state:
+        # Check if task is already completed - warn Purple Agent to stop
+        current_state = shared_state.get_state()
+        if current_state.task_completed:
+            logger.warning(_purple(f"⚠️ Task already completed (done={current_state.done}). Purple Agent should stop calling tools."))
+            return {
+                "axtree_txt": "",
+                "goal": "✅ TASK ALREADY COMPLETED - Stop calling tools and return your final answer.",
+                "url": "",
+                "token_estimate": 0,
+                "task_completed": True,
+                "final_reward": current_state.reward,
+                "message": "Task was completed in previous action. No more observations needed. Report success to orchestrator.",
+            }
+        
         shared_state.update_tool_invocation("get_observation")
         # Pulse watchdog - Purple Agent is active
         pulse(ActivityType.MCP_TOOL_CALL, f"get_observation:{observation_mode}")
         # Log invocation summary in purple for easy visibility
         tool_count = shared_state.get_state().mcp_tool_invocations
         max_calls = shared_state.get_state().max_tool_calls
-        logger.info(_purple(f"MCP tool called: get_observation, mode={observation_mode}, tool_call={tool_count}/{max_calls}"))
+        # Tool call logging disabled (verbose)
         
         # Check tool call limit BEFORE executing
         if shared_state.check_tool_limit():
@@ -467,9 +497,9 @@ def main():
     if args.headless:
         os.environ["BROWSER_HEADLESS"] = "true"
     else:
-        # Default to false (visible) if not specified, but allow existing env var to take precedence
+        # Default to true (headless) if not specified, but allow existing env var to take precedence
         if "BROWSER_HEADLESS" not in os.environ:
-            os.environ["BROWSER_HEADLESS"] = "false"
+            os.environ["BROWSER_HEADLESS"] = "true"
     
     logger.info(f"Starting MCP server with HTTP transport on port {port}")
     
@@ -532,6 +562,16 @@ async def start_http_server(port: int = 8001) -> None:
         log_level="info",
     )
     server = uvicorn.Server(config)
+    
+    # Log MCP server startup
+    logger.info("=" * 60)
+    logger.info("✅ MCP SERVER STARTED SUCCESSFULLY")
+    logger.info(f"Transport: HTTP (Streamable)")
+    logger.info(f"Endpoint: http://0.0.0.0:{port}/mcp")
+    logger.info(f"Allowed Hosts: localhost:*, 127.0.0.1:*, green-agent:* (any port)")
+    logger.info(f"DNS Rebinding Protection: Enabled")
+    logger.info(f"Status: Ready to accept connections")
+    logger.info("=" * 60)
     
     # Run in background
     await server.serve()

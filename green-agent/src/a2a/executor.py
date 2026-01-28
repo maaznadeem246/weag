@@ -2,9 +2,10 @@
 Green Executor for A2A protocol integration.
 Bridges LLM Agent with A2A SDK's AgentExecutor interface.
 
-New architecture: LLM handles all messages, background orchestrator runs independently.
+Architecture: Runs assessment synchronously and returns artifacts in A2A response.
 """
 
+import asyncio
 from abc import abstractmethod
 from typing import Optional
 from pydantic import ValidationError
@@ -19,6 +20,8 @@ from a2a.types import (
     Part,
     TextPart,
     DataPart,
+    Message,
+    Role,
 )
 from a2a.utils import (
     new_agent_text_message,
@@ -165,11 +168,89 @@ class GreenExecutor(AgentExecutor):
             
             logger.info(f"LLM response: {llm_response[:200]}...")
             
-            # Send response back to Purple Agent
-            await updater.update_status(
-                state=TaskState.completed,
-                message=new_agent_text_message(llm_response)
+            # Check if assessment was started and wait for completion
+            assessment = self._context.assessment_tracker if self._context else None
+            
+            if assessment and assessment.orchestrator_task:
+                logger.info("Assessment started - waiting for completion...")
+                
+                # Calculate dynamic timeout based on assessment configuration
+                # Formula: (tasks * timeout_per_task * 1.5) + 60s startup overhead
+                total_tasks = assessment.total_tasks
+                timeout_per_task = assessment.timeout_seconds
+                executor_timeout = (total_tasks * timeout_per_task * 1.5) + 60
+                
+                logger.info(f"⏱️ Executor timeout: {executor_timeout:.0f}s ({total_tasks} tasks × {timeout_per_task}s × 1.5 + 60s overhead)")
+                
+                # Wait for orchestrator to complete (with dynamic timeout)
+                try:
+                    await asyncio.wait_for(assessment.orchestrator_task, timeout=executor_timeout)
+                    logger.info("Assessment completed successfully")
+                    
+                    # Get results and add as proper artifact using TaskUpdater.add_artifact()
+                    results = assessment.get_results_summary()
+                    artifact_parts = [Part(root=DataPart(kind="data", data=results))]
+                    
+                    # Add artifact to task using proper A2A SDK method
+                    await updater.add_artifact(
+                        parts=artifact_parts,
+                        name="assessment_results",
+                        last_chunk=True
+                    )
+                    logger.info("Assessment artifact added to task")
+                    
+                except asyncio.TimeoutError:
+                    logger.error(f"Assessment timed out after {executor_timeout:.0f}s (timeout formula: {total_tasks} tasks × {timeout_per_task}s × 1.5 + 60s)")
+                    llm_response = f"Assessment timed out after {executor_timeout:.0f} seconds. Please check logs for details."
+                    
+                    # Add timeout artifact with partial results
+                    timeout_results = {
+                        "status": "timeout",
+                        "error": f"Assessment exceeded {executor_timeout:.0f}s timeout",
+                        "timeout_config": {
+                            "total_tasks": total_tasks,
+                            "timeout_per_task": timeout_per_task,
+                            "executor_timeout": executor_timeout
+                        },
+                        "partial_results": assessment.get_results_summary() if assessment else {}
+                    }
+                    artifact_parts = [Part(root=DataPart(kind="data", data=timeout_results))]
+                    await updater.add_artifact(
+                        parts=artifact_parts,
+                        name="assessment_results",
+                        last_chunk=True
+                    )
+                    logger.info("Timeout artifact added to task")
+                    
+                except Exception as e:
+                    logger.error(f"Assessment failed: {e}", exc_info=True)
+                    llm_response = f"Assessment failed: {str(e)}"
+                    
+                    # Add error artifact with failure details
+                    error_results = {
+                        "status": "error",
+                        "error": str(e),
+                        "partial_results": assessment.get_results_summary() if assessment else {}
+                    }
+                    artifact_parts = [Part(root=DataPart(kind="data", data=error_results))]
+                    await updater.add_artifact(
+                        parts=artifact_parts,
+                        name="assessment_results",
+                        last_chunk=True
+                    )
+                    logger.info("Error artifact added to task")
+            
+            # Create proper Message object with required fields
+            from uuid import uuid4
+            response_message = Message(
+                kind="message",
+                role=Role.agent,
+                parts=[Part(root=TextPart(kind="text", text=llm_response))],
+                message_id=uuid4().hex,
             )
+            
+            # Complete the task with the message (artifacts already added above)
+            await updater.complete(message=response_message)
             
             logger.info("A2A message processed successfully")
             

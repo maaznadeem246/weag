@@ -113,7 +113,7 @@ class A2AClient:
         """
         try:
             # Step 1: Get Green Agent card
-            logger.info(f"Connecting to Green Agent at {self.green_agent_url}")
+            # Connecting to Green Agent (verbose logging disabled)
             resolver = A2ACardResolver(httpx_client=self.client, base_url=self.green_agent_url)
 
             # Retry fetching agent card with bounded backoff while Green Agent starts
@@ -127,7 +127,7 @@ class A2AClient:
                 attempt += 1
                 try:
                     agent_card = await resolver.get_agent_card()
-                    logger.info(f"Connected to: {agent_card.name} (after {attempt} attempts)")
+                    # Connected (verbose logging disabled)
                     break
                 except Exception as exc:
                     last_exc = exc
@@ -158,7 +158,7 @@ class A2AClient:
                 message_id=uuid4().hex,
             )
 
-            logger.info("Sending readiness message via A2A...")
+            # Sending readiness message (verbose logging disabled)
             print("[PURPLE] Sending message to Green Agent (streaming=True)...", flush=True)
             
             # Step 4: Process streaming response following official A2A SDK pattern

@@ -165,27 +165,26 @@ class SessionManager:
             self.sessions[session.session_id] = session
             self.current_session_id = session.session_id
             
-            logger.info(
-                "Environment session created successfully",
-                extra={
-                    "session_id": session.session_id,
-                    "task_id": config.task_id,
-                    "benchmark": session.benchmark,
-                    "browser_pids": spawned_pids,
-                }
-            )
+            # Log environment initialization success
+            logger.info("=" * 60)
+            logger.info("✅ ENVIRONMENT INITIALIZED SUCCESSFULLY")
+            logger.info(f"Task: {config.task_id}")
+            logger.info(f"Benchmark: {session.benchmark}")
+            logger.info(f"Session ID: {session.session_id}")
+            logger.info(f"Browser PIDs: {len(spawned_pids)} processes")
+            logger.info(f"Headless Mode: {headless}")
+            logger.info("=" * 60)
             
             return session
             
         except Exception as e:
-            logger.error(
-                "Failed to create environment",
-                extra={
-                    "task_id": config.task_id,
-                    "error": str(e),
-                },
-                exc_info=True
-            )
+            # Log environment initialization error
+            logger.error("=" * 60)
+            logger.error("❌ ENVIRONMENT INITIALIZATION FAILED")
+            logger.error(f"Task: {config.task_id}")
+            logger.error(f"Error: {str(e)}")
+            logger.error("=" * 60)
+            logger.error(f"Full error details:", exc_info=True)
             raise RuntimeError(f"Environment creation failed: {str(e)}") from e
     
     def get_session(self, session_id: Optional[str] = None) -> Optional[EnvironmentSession]:

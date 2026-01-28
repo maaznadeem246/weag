@@ -214,7 +214,7 @@ def create_test_purple_agent(config: PurpleAgentConfig) -> Agent[TestPurpleAgent
     # Get display name for logging
     display_model = model_name if isinstance(model_name, str) else llm_config.litellm_model
     
-    logger.info(f"Created Purple Agent with model: {display_model}, provider: {llm_config.provider.value}")
+    # Purple Agent created (verbose logging disabled)
     
     return agent
 

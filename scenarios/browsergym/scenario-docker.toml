@@ -1,71 +1,57 @@
 # Docker Scenario for kickstart_assessment.py
 # Use this when running with Docker containers (no local process spawning)
 #
-# ⚠️  CONFIGURATION POLICY:
-#     - API keys and secrets: .env file ONLY (never commit to git)
-#     - All other settings: THIS TOML file
-#     - Runtime overrides: CLI flags (--task, --visible, --log-level, etc.)
-#
 # USAGE:
 #   .\docker-test.ps1 -Start                           # Start containers first
 #   python kickstart_assessment.py --scenario scenarios/browsergym/scenario-docker.toml --task miniwob.click-test
-#   python kickstart_assessment.py --scenario scenarios/browsergym/scenario-docker.toml --visible  # Override headless
 #
 # This config connects to existing Docker containers instead of spawning processes
 
 # =============================================================================
-# CONFIGURATION - All assessment settings centralized here
+# ASSESSMENT SETTINGS
 # =============================================================================
-[config]
-# Domain-specific settings
-domain = "browsergym"  # benchmark domain: browsergym, airline, etc.
-
-# Assessment execution settings
-timeout_seconds = 120  # Default timeout for the whole assessment run (seconds)
-max_steps = 10  # Default max steps per task (passed to Green Agent)
-max_tasks_per_benchmark = 2  # Default max tasks per benchmark
-headless = true  # Browser visibility (false = visible, true = headless)
-
-# Optional: Override max tasks for all benchmarks
-# num_tasks = 3
+[assessment]
+# Default timeout for the whole assessment run (seconds)
+timeout_seconds = 120
+# Default max steps per task (passed to Green; actual enforcement depends on benchmark/env)
+max_steps = 10
+# Default max tasks per benchmark (used when benchmark doesn't specify max_tasks)
+max_tasks_per_benchmark = 2
+# Browser visibility (set to false for headless)
+headless = true
 
 # =============================================================================
-# GREEN AGENT (Evaluator) - Docker Container Configuration
+# GREEN AGENT (Evaluator) - Docker Container
 # =============================================================================
 [green_agent]
-# Docker image (for local testing - comment out when using agentbeats_id for GitHub Actions)
-image = "weag-green-agent:latest"
-
-# AgentBeats platform registration ID (uncomment for GitHub Actions deployment)
-# agentbeats_id = ""  # Your green agent ID from AgentBeats
-
-# Docker container endpoint (exposed on localhost)
 endpoint = "http://localhost:9009"
 # NO 'cmd' field - connects to existing Docker container on port 9009
 
-# Environment variables - API keys injected from .env or GitHub Actions secrets
-# Use ${VAR_NAME} syntax for dynamic injection (GitHub Actions, CI/CD)
-env = { GREEN_LLM_PROVIDER = "openai", GREEN_OPENAI_MODEL = "gpt-4o", GREEN_OPENAI_API_KEY = "${OPENAI_API_KEY}" }
+# Purple agent URL for Docker networking (green->purple communication)
+# Inside Docker, containers use service names, not localhost
+# purple_agent_url = "http://purple-agent:9010/"
+
+# Optional: env vars (already set in docker-compose.yml, these are for reference only)
+[green_agent.env]
+# GREEN_LLM_PROVIDER = "openai"
+# GREEN_OPENAI_MODEL = "gpt-4"
+# Set via .env file
 
 # =============================================================================
 # PURPLE AGENT (Participant) - Docker Container
 # =============================================================================
 [[participants]]
-# Docker image (for local testing - comment out when using agentbeats_id for GitHub Actions)
-image = "weag-purple-agent:latest"
-
-# AgentBeats platform registration ID (uncomment for GitHub Actions deployment)
-# agentbeats_id = ""  # Your purple agent ID from AgentBeats
-name = "purple_agent"
 role = "purple_agent"
-
-# Docker container endpoint (internal Docker network)
+# Docker networking: Green Agent reaches Purple Agent via container name, not localhost
+# This is the endpoint Green Agent uses to communicate with Purple Agent inside Docker network
 endpoint = "http://purple-agent:9010/"
 # NO 'cmd' field - connects to existing Docker container on port 9010
 
-# Environment variables - API keys injected from .env or GitHub Actions secrets
-# Use ${VAR_NAME} syntax for dynamic injection (GitHub Actions, CI/CD)
-env = { PURPLE_LLM_PROVIDER = "openai", PURPLE_OPENAI_MODEL = "gpt-4o", PURPLE_OPENAI_API_KEY = "${OPENAI_API_KEY}" }
+# Optional: env vars (already set in docker-compose.yml, these are for reference only)
+[purple_agent.env]
+# PURPLE_LLM_PROVIDER = "openai"
+# PURPLE_OPENAI_MODEL = "gpt-4"
+# Set via .env file
 
 # =============================================================================
 # BENCHMARKS CONFIGURATION
@@ -89,13 +75,13 @@ env = { PURPLE_LLM_PROVIDER = "openai", PURPLE_OPENAI_MODEL = "gpt-4o", PURPLE_O
 #   - weblinx: Requires dataset download (WEBLINX_DATA_PATH env var)
 
 # MiniWoB - Local HTML tasks (ready to use)
-[[benchmarks]]
-id = "miniwob"
-# Uses global max_tasks_per_benchmark (2 tasks)
+# [[benchmarks]]
+# id = "miniwob"
+# Uses global max_tasks_per_benchmark
 
 # AssistantBench - HuggingFace tasks (ready to use)
-[[benchmarks]]
-id = "assistantbench"
+# [[benchmarks]]
+# id = "assistantbench"
 
 # WebArena - Requires Docker setup (comment out if not available)
 # [[benchmarks]]
