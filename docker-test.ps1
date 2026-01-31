@@ -3,6 +3,9 @@
 
 param(
     [switch]$Build,
+    [switch]$NoCache,
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$RemainingArgs,
     [switch]$Start,
     [switch]$Stop,
     [switch]$Logs,
@@ -20,6 +23,7 @@ function Show-Help {
     Write-Host ""
     Write-Host "Options:" -ForegroundColor Green
     Write-Host "  -Build    Build Docker images"
+    Write-Host "  -NoCache  Disable build cache (alias: --NoCache)"
     Write-Host "  -Start    Start containers (builds if needed)"
     Write-Host "  -Stop     Stop containers"
     Write-Host "  -Logs     Follow container logs"
@@ -40,7 +44,11 @@ function Show-Help {
 
 function Build-Images {
     Write-Host "🔨 Building Docker images..." -ForegroundColor Cyan
-    docker compose -f $ComposeFile build
+    if ($NoCache) {
+        docker compose -f $ComposeFile build --no-cache
+    } else {
+        docker compose -f $ComposeFile build
+    }
     if ($LASTEXITCODE -eq 0) {
         Write-Host "✓ Images built successfully" -ForegroundColor Green
     } else {
@@ -114,6 +122,11 @@ function Clean-All {
 if ($Help) {
     Show-Help
     exit 0
+}
+
+$hasNoCacheAlias = $RemainingArgs -contains "--NoCache"
+if ($hasNoCacheAlias) {
+    $NoCache = $true
 }
 
 # Check if no parameters were provided

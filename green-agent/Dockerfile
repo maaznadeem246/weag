@@ -31,10 +31,8 @@ WORKDIR /home/agent
 # Copy dependency files first for better caching
 COPY --chown=agent:agent pyproject.toml uv.lock README.md ./
 
-# Copy source and entrypoint
+# Copy source
 COPY --chown=agent:agent src src
-COPY --chown=agent:agent entrypoint.sh ./
-RUN chmod +x entrypoint.sh
 
 # Install dependencies with docker extras for all benchmarks
 # Use docker-minimal for faster builds with only miniwob + assistantbench
@@ -45,6 +43,24 @@ RUN --mount=type=cache,target=/home/agent/.cache/uv,uid=1000 \
 
 # Install Playwright browsers
 RUN uv run playwright install chromium
+
+# Download benchmark datasets at build time
+RUN mkdir -p /home/agent/datasets/miniwob && \
+    TEMP_DIR="/tmp/miniwob_clone" && \
+    git clone --depth 1 --filter=blob:none --sparse \
+        https://github.com/Farama-Foundation/miniwob-plusplus.git "$TEMP_DIR" && \
+    cd "$TEMP_DIR" && git sparse-checkout set miniwob/html && cd /home/agent && \
+    cp -r "$TEMP_DIR/miniwob/html" /home/agent/datasets/miniwob/ && \
+    rm -rf "$TEMP_DIR"
+
+RUN uv run python -c "\
+from huggingface_hub import hf_hub_download; \
+hf_hub_download( \
+    repo_id='McGill-NLP/weblinx-browsergym', \
+    repo_type='dataset', \
+    filename='metadata.json', \
+    local_dir='datasets/weblinx' \
+)"
 
 # WebLINX configuration - only register test_iid split to keep import fast
 ENV BROWSERGYM_WEBLINX_CACHE_DIR=/home/agent/datasets/weblinx
@@ -64,8 +80,8 @@ ENV DISPLAY=:99
 ENV AGENT_CARD_URL=""
 ENV MCP_EXTERNAL_URL=""
 
-# Entrypoint downloads datasets on first run, then starts the agent
-ENTRYPOINT ["./entrypoint.sh"]
+# Entrypoint starts the agent
+ENTRYPOINT ["uv", "run", "python", "-m", "src.main"]
 CMD ["--host", "0.0.0.0", "--port", "9009"]
 EXPOSE 9009
 EXPOSE 8001
