@@ -28,6 +28,7 @@ WEAG (Web Environment Agent Green) is a complete Agent-to-Agent (A2A) assessment
 |-----------|-------|-------------|--------|
 | **MiniWoB** | 125+ | Simple web tasks (clicks, forms, navigation) | ✅ Ready |
 | **AssistantBench** | 214 | Real-world assistant tasks (search, research) | ✅ Ready |
+| **WebLinx** | 1,200+ | Real-world web navigation from human demonstrations | ✅ Ready |
 | **WebArena** | 812 | E-commerce and CMS tasks | 🚧 Planned |
 | **VisualWebArena** | 910 | Vision-based web navigation | 🚧 Planned |
 | **WorkArena** | 33 | Office automation tasks | 🚧 Planned |
