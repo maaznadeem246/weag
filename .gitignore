@@ -56,6 +56,9 @@ Thumbs.db
 tmp/
 temp/
 
+# Datasets (downloaded at runtime, not committed)
+green-agent/datasets/
+
 # Docker
 *.tar
 

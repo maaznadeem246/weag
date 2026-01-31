@@ -29,7 +29,7 @@ DEFAULT_EVALUATION_BENCHMARKS = [
     # "webarena",        # ⚠️ Docker containers required
     # "visualwebarena",  # ⚠️ Docker containers required
     # "workarena",       # ⚠️ ServiceNow instance required
-    # "weblinx",         # ⚠️ Dataset download required
+    "weblinx",         # ⚠️ Dataset download required
 ]
 
 # Default maximum tasks per benchmark (when not specified in config)

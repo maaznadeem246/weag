@@ -9,8 +9,7 @@ Supports dynamic benchmark-specific tool registration per Approach III.
 
 import asyncio
 import os
-from typing import Optional, Literal
-from typing_extensions import TypedDict
+from typing import Optional, Any
 from datetime import datetime
 import json
 from mcp.server.fastmcp import FastMCP
@@ -49,44 +48,9 @@ def _purple(text: str) -> str:
     return f"\x1b[35m{text}\x1b[0m"
 
 
-# Type definitions for MCP tool parameters
-class ActionDict(TypedDict, total=False):
-    """Type definition for action dictionary passed to execute_actions tool.
-    
-    All fields are optional at TypedDict level, but validation occurs at runtime
-    based on the action type. See execute_actions docstring for requirements.
-    """
-    # Action identifier (at least one of these must be present)
-    action: str
-    action_type: str
-    name: str
-    
-    # Element targeting
-    bid: str
-    from_bid: str
-    to_bid: str
-    
-    # Text/content
-    text: str
-    url: str
-    
-    # Keyboard
-    key: str
-    key_comb: str
-    
-    # Scrolling
-    direction: Literal["up", "down", "left", "right"]
-    dx: int
-    dy: int
-    
-    # Navigation
-    tab_index: int
-    
-    # Selection
-    options: list[str]
-    
-    # Mouse
-    button: Literal["left", "right", "middle"]
+# Type definition for MCP tool parameters
+# Using dict[str, Any] for flexibility - validation happens at runtime based on action type
+# The dynamic documentation tells Purple Agent which actions and parameters are valid per benchmark
 
 # Configure transport security to allow Docker service names
 # Use wildcards to support dynamic port configuration
@@ -117,77 +81,23 @@ active_benchmark_profile = None  # Track active benchmark for observation filter
 
 
 @mcp.tool()
-async def execute_actions(actions: list[ActionDict]) -> dict:
+async def execute_actions(actions: list[dict[str, Any]]) -> dict:
     """
-    Execute a batch of browser actions sequentially.
-    
-    Takes an array of action objects and executes them in order against the
-    BrowserGym environment. Each action interacts with page elements identified
-    by their browser ID (bid) from the accessibility tree observation.
-    
-    Target latency: <2s for batch execution.
-    
+    Execute a batch of browser actions sequentially on the current page.
+
+    Use this to interact with web elements identified by their bid (browser ID) from the
+    accessibility tree. See the "Allowed actions" section below for supported action types
+    and their required parameters.
+
     Args:
-        actions: Array of action objects (1-50 actions max). Each action must be a dict with:
-        
-            REQUIRED for all actions:
-            - action (str): Action type. Supported values:
-                * Element interactions: "click", "dblclick", "hover", "fill", "clear", "focus", "select_option"
-                * Keyboard: "keyboard_type", "keyboard_press"  
-                * Scrolling: "scroll"
-                * Navigation: "goto", "new_tab", "tab_close", "tab_focus"
-                * Communication: "send_msg_to_user"
-                * Advanced: "drag_and_drop"
-              Note: Also accepts "action_type" or "name" as field names for compatibility.
-            
-            CONDITIONAL (depending on action type):
-            - bid (str): Browser element ID from AXTree - REQUIRED for: click, dblclick, hover, fill, 
-                        clear, focus, select_option, drag_and_drop (as from_bid)
-            - text (str): Text input - REQUIRED for: fill, keyboard_type, send_msg_to_user
-            - url (str): Target URL - REQUIRED for: goto
-            - direction (str): Scroll direction "up"/"down"/"left"/"right" - for: scroll (legacy)
-            - dx (int): Horizontal scroll pixels - for: scroll (preferred over direction)
-            - dy (int): Vertical scroll pixels - for: scroll (preferred over direction)
-            - key (str): Single key name - for: keyboard_press (e.g., "Enter", "Tab", "Escape")
-            - key_comb (str): Key combination - for: keyboard_press (e.g., "Control+C")
-            - tab_index (int): Zero-based tab index - REQUIRED for: tab_focus
-            - options (list[str]): Option values - for: select_option (alternative to text)
-            - button (str): Mouse button "left"/"right"/"middle" - for: click, dblclick (optional)
-            - from_bid (str): Source element ID - REQUIRED for: drag_and_drop
-            - to_bid (str): Target element ID - REQUIRED for: drag_and_drop
-    
+        actions: Array of 1-50 action dicts. Each has "action" field plus action-specific params.
+
     Returns:
-        dict with:
-            - results (list[dict]): Per-action results, each containing:
-                * observation (dict): Filtered observation after action execution
-                * reward (float): BrowserGym reward (1.0 = task complete)
-                * done (bool): True if task is complete
-                * truncated (bool): True if max steps reached
-                * error (str|None): Error message if action failed
-                * action_index (int): Zero-based index in batch
-            - batch_id (str): Unique batch identifier for tracking
-            - latency_ms (float): Total batch execution time in milliseconds
-            - early_termination (bool): True if batch stopped early (done=True or error)
-    
+        dict with results (list), batch_id (str), latency_ms (float), early_termination (bool)
+
     Examples:
-        Simple click:
         {"actions": [{"action": "click", "bid": "12"}]}
-        
-        Fill text input:
-        {"actions": [{"action": "fill", "bid": "5", "text": "hello world"}]}
-        
-        Scroll down:
-        {"actions": [{"action": "scroll", "dy": 100}]}
-        
-        Navigate to URL:
-        {"actions": [{"action": "goto", "url": "https://example.com"}]}
-        
-        Multiple actions:
-        {"actions": [
-            {"action": "click", "bid": "3"},
-            {"action": "fill", "bid": "7", "text": "search query"},
-            {"action": "keyboard_press", "key": "Enter"}
-        ]}
+        {"actions": [{"action": "fill", "bid": "5", "text": "hello"}]}
     """
     global shared_state
     start_time = datetime.utcnow()
@@ -271,7 +181,50 @@ async def execute_actions(actions: list[ActionDict]) -> dict:
             )
             for result in completed_batch.results
         ]
-        
+
+        # ANSI color codes for console output
+        _ANSI_GREEN = "\x1b[32m"
+        _ANSI_BLUE = "\x1b[34m"
+        _ANSI_CYAN = "\x1b[36m"
+        _ANSI_RESET = "\x1b[0m"
+
+        # Extract done flags and check for task completion
+        done_flags = [bool(r.get("done", False)) if isinstance(r, dict) else False for r in results]
+        done_count = sum(done_flags)
+        print(results)
+        # Print to console with colors (bypasses JSON formatter)
+        print(f"\n{_ANSI_GREEN}{'='*60}")
+        print(f"📊 MCP Action Results: {len(results)} action(s) executed")
+        print(f"{'='*60}{_ANSI_RESET}\n")
+
+        # Show each result with its key information
+        for idx, result in enumerate(results):
+            reward = result.get("reward", 0.0)
+            done = result.get("done", False)
+            error = result.get("error", None)
+
+            status_color = _ANSI_BLUE if done else _ANSI_CYAN
+            status_icon = "✅" if not error else "❌"
+
+            print(f"{status_color}{status_icon} Action {idx+1}:")
+            print(f"   - done: {done}")
+            print(f"   - reward: {reward:.2f}")
+            if error:
+                print(f"   - error: {error}")
+            print(f"{_ANSI_RESET}")
+
+        # Highlight task completion if detected
+        if done_count > 0:
+            print(f"{_ANSI_BLUE}{'='*60}")
+            print(f"🎯 TASK COMPLETION DETECTED!")
+            print(f"   {done_count}/{len(done_flags)} action(s) marked done=True")
+            print(f"{'='*60}{_ANSI_RESET}\n")
+        else:
+            print(f"{_ANSI_CYAN}⏳ Task in progress: all actions returned done=False{_ANSI_RESET}\n")
+
+        # Also log to JSON logger for records
+        logger.info(f"MCP action results: {len(results)} actions, done_count={done_count}")
+
         # Log MCP tool execution results
         logger.info(f"🛠️  MCP: execute_actions completed ({len(results)} actions)")
         for idx, res in enumerate(completed_batch.results):
@@ -321,31 +274,27 @@ async def execute_actions(actions: list[ActionDict]) -> dict:
 @mcp.tool()
 def get_observation(observation_mode: str = "axtree") -> dict:
     """
-    Get filtered observation of current browser page state.
-    
-    Returns the current state of the browser environment including the
-    accessibility tree (axtree), page URL, task goal, and token estimate.
-    The observation is filtered to stay within token limits.
-    
-    Target: <5K tokens for efficient LLM processing.
-    
+    Get current browser page state including task goal and interactive elements.
+
+    Returns the accessibility tree showing elements you can interact with, along with
+    the task goal, current URL, and open tabs. Use the bid (browser ID) values from
+    the axtree to target elements in your actions.
+
     Args:
-        observation_mode: Format mode for observation output.
-            - 'axtree' (default): Accessibility tree with element IDs (bid) for interaction
-            - 'dom': Raw DOM structure (larger, more detailed)
-            - 'screenshot': Base64-encoded PNG screenshot of current viewport
-    
+        observation_mode: Format for observation (default: "axtree")
+            - "axtree": Accessibility tree with element IDs (recommended)
+            - "dom": Raw DOM structure (more detailed)
+            - "screenshot": Base64-encoded PNG image
+
     Returns:
         dict with:
-            - axtree_txt (str): Accessibility tree text showing interactive elements with bid values
-            - goal (str): The task goal/objective to accomplish
+            - axtree_txt (str): Tree of interactive elements with bid values
+            - goal (str): Task objective to accomplish
             - url (str): Current page URL
-            - token_estimate (int): Estimated token count for the observation
-            - open_pages (list): List of open browser tabs/pages
-    
+            - open_pages (list): Open browser tabs
+
     Examples:
-        {"observation_mode": "axtree"}
-        {}
+        {"observation_mode": "axtree"} or just {}
     """
     global shared_state
     start_time = datetime.utcnow()

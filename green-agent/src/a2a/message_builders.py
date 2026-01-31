@@ -6,6 +6,7 @@ Extracted from communication_tools.py for better modularity.
 
 from typing import Optional, List
 from src.benchmarks.profiles import BenchmarkProfile
+from src.benchmarks.action_extractor import build_benchmark_action_docs
 from src.mcp import ToolMetadata, format_tools_documentation
 from src.utils.shared_state import DEFAULT_MAX_TOOL_CALLS
 
@@ -13,20 +14,26 @@ from src.utils.shared_state import DEFAULT_MAX_TOOL_CALLS
 def build_profile_section(profile: Optional[BenchmarkProfile]) -> str:
     """
     Build profile information section for task message.
-    
+
     Args:
         profile: Benchmark profile with configuration
-        
+
     Returns:
         Formatted profile section string
     """
     if not profile:
         return ""
-    
-    return f"""
+
+    info = f"""
 - **Benchmark Name**: {profile.display_name}
 - **Token Limit**: {profile.token_limit} tokens
 - **Observation Mode**: {profile.observation_mode.value}"""
+
+    # Add benchmark-specific instructions if present
+    if profile.instructions:
+        info += f"\n\n**Benchmark Instructions:**\n{profile.instructions}"
+
+    return info
 
 
 def build_mcp_connection_section(mcp_details: dict) -> str:
@@ -67,16 +74,16 @@ def build_tools_section(tools_details: List[ToolMetadata], benchmark: str) -> st
 def build_task_goal_section(task_goal: Optional[str]) -> str:
     """
     Build task goal section if available.
-    
+
     Args:
         task_goal: Task goal text from BrowserGym
-        
+
     Returns:
         Formatted task goal section or empty string
     """
     if not task_goal:
         return ""
-    
+
     return f"""
 
 ## TASK GOAL
@@ -84,6 +91,34 @@ def build_task_goal_section(task_goal: Optional[str]) -> str:
 {task_goal}
 
 """
+
+
+def build_benchmark_actions_section(benchmark: str) -> str:
+    """
+    Build benchmark-specific allowed actions section.
+
+    Extracts the list of allowed action strings from BrowserGym's ACTION_SUBSETS
+    and formats them for Purple Agent to understand which actions are valid.
+
+    Args:
+        benchmark: Benchmark name (e.g., 'assistantbench', 'miniwob')
+
+    Returns:
+        Formatted section with allowed actions and their parameters
+    """
+    try:
+        action_docs = build_benchmark_action_docs(benchmark)
+        return f"""
+
+{action_docs}
+
+"""
+    except Exception as e:
+        # If extraction fails, return empty section
+        from src.utils.logging import get_logger
+        logger = get_logger(__name__)
+        logger.warning(f"Failed to build benchmark actions section for {benchmark}: {e}")
+        return ""
 
 
 def build_task_message(
@@ -117,7 +152,7 @@ def build_task_message(
     profile_info = build_profile_section(profile)
     task_goal_section = build_task_goal_section(task_goal)
     tools_section = build_tools_section(tools_details, benchmark)
-    
+
     # Build complete message
     message = f"""{'=' * 60}
 ASSESSMENT TASK
@@ -147,5 +182,5 @@ Complete the browser-based task by interacting with web elements. The environmen
 {task_goal_section}
 
 {'=' * 60}"""
-    
+
     return message

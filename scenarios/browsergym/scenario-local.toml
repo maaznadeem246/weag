@@ -23,7 +23,7 @@ domain = "browsergym"  # benchmark domain: browsergym, airline, etc.
 
 # Assessment execution settings
 timeout_seconds = 120  # Default timeout for the whole assessment run (seconds)
-max_steps = 10  # Default max steps per task (passed to Green Agent)
+max_steps = 15  # Default max steps per task (passed to Green Agent)
 max_tasks_per_benchmark = 2  # Default max tasks per benchmark
 headless = false  # Browser visibility (false = visible, true = headless)
 
@@ -45,7 +45,7 @@ cmd = "python -m src.green_agent.main --host 127.0.0.1 --port 9009"
 # Environment variables - API keys injected from .env or GitHub Actions secrets
 # Use ${VAR_NAME} syntax for dynamic injection (GitHub Actions, CI/CD)
 # IMPORTANT: Inline tables must be on ONE line with NO comments inside
-env = { GREEN_LLM_PROVIDER = "litellm", GREEN_LITELLM_MODEL = "google/gemini-2.5-pro", GREEN_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}" }
+env = { GREEN_LLM_PROVIDER = "litellm", GREEN_LITELLM_MODEL = "openai/gpt-oss-120b", GREEN_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}", BROWSERGYM_WEBLINX_CACHE_DIR = "./datasets/weblinx", BROWSERGYM_WEBLINX_REGISTER_TRAIN = "false", BROWSERGYM_WEBLINX_REGISTER_VALID = "false", BROWSERGYM_WEBLINX_REGISTER_TEST = "true", BROWSERGYM_WEBLINX_REGISTER_TEST_OOD = "false" }
 
 # =============================================================================
 # PURPLE AGENT (Participant) - Configure endpoint and model here
@@ -64,7 +64,7 @@ cmd = "python -m src.purple_agent.main --port 9010"
 # Environment variables - API keys injected from .env or GitHub Actions secrets
 # Use ${VAR_NAME} syntax for dynamic injection (GitHub Actions, CI/CD)
 # Note: Inline tables must be on ONE line with no comments
-env = { PURPLE_LLM_PROVIDER = "litellm", PURPLE_LITELLM_MODEL = "google/gemini-2.5-pro", PURPLE_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}" }
+env = { PURPLE_LLM_PROVIDER = "litellm", PURPLE_LITELLM_MODEL = "google/gemini-2.5-flash", PURPLE_OPENROUTER_API_KEY = "${OPENROUTER_API_KEY}" }
 
 # =============================================================================
 # BENCHMARKS CONFIGURATION
@@ -97,7 +97,7 @@ env = { PURPLE_LLM_PROVIDER = "litellm", PURPLE_LITELLM_MODEL = "google/gemini-2
 # id = "workarena"
 # max_tasks = 3
 
-# WebLINX - Requires dataset download (comment out if not available)
+# WebLINX - Multi-turn dialogue benchmark (dataset auto-downloads to ./datasets/weblinx)
 # [[benchmarks]]
 # id = "weblinx"
 # max_tasks = 3

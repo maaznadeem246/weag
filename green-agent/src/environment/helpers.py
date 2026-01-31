@@ -19,7 +19,7 @@ BENCHMARK_MODULES = {
     "visualwebarena": "browsergym.webarena",
     "workarena": "browsergym.workarena",
     "assistantbench": "browsergym.assistantbench",
-    "weblinx": "browsergym.weblinx",
+    "weblinx": "weblinx_browsergym",
     "openended": "browsergym.core",
 }
 

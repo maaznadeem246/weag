@@ -293,7 +293,7 @@ class AssessmentOrchestrator:
         prev_task = assessment.get_task(current_index - 1)
         prev_benchmark = prev_task.benchmark if prev_task else None
         is_benchmark_switch = prev_benchmark != current_benchmark
-        
+
         # Environment switching
         env_config = EnvironmentConfig(task_id=current_task, max_steps=max_steps)
         from src.environment.thread_executor import browser_executor
@@ -308,7 +308,7 @@ class AssessmentOrchestrator:
         await browser_executor.run(mcp_session_manager.switch_to_task, current_task, env_config)
         
         pulse(ActivityType.HEARTBEAT, f"env_switch_completed_{current_task}")
-        
+
         # Update profile and tools
         profile = get_profile_for_task(current_task)
         if hasattr(mcp_observation_filter, "apply_profile"):

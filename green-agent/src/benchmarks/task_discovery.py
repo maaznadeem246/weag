@@ -57,7 +57,7 @@ class TaskDiscovery:
             benchmarks_root: Root directory containing benchmark data.
                            Defaults to project_root/benchmarks
         """
-        self.benchmarks_root = benchmarks_root or self._find_project_root() / "benchmarks"
+        self.benchmarks_root = benchmarks_root or self._find_project_root() / "datasets"
         logger.info(f"TaskDiscovery initialized with benchmarks_root: {self.benchmarks_root}")
         self._task_cache: Dict[str, List[TaskInfo]] = {}
         self._all_tasks_cache: Optional[List[TaskInfo]] = None
@@ -70,15 +70,15 @@ class TaskDiscovery:
         """
         current = Path.cwd()
         
-        # First, look for a 'benchmarks' directory (primary indicator of workspace root)
+        # First, look for a 'datasets' directory (check both direct and green-agent/ subdir)
         search = current
         while search != search.parent:
-            benchmarks_dir = search / "benchmarks"
-            if benchmarks_dir.exists() and benchmarks_dir.is_dir():
-                # Check if it contains miniwob (to confirm it's the right one)
-                if (benchmarks_dir / "miniwob").exists():
-                    logger.debug(f"Found workspace root with benchmarks: {search}")
-                    return search
+            for candidate in [search / "datasets", search / "green-agent" / "datasets"]:
+                if candidate.exists() and candidate.is_dir():
+                    if (candidate / "miniwob").exists():
+                        # Return the parent of datasets/ so benchmarks_root resolves correctly
+                        logger.debug(f"Found datasets at: {candidate}")
+                        return candidate.parent
             search = search.parent
         
         # Fallback: look for pyproject.toml (original behavior)
@@ -245,23 +245,51 @@ class TaskDiscovery:
     
     def discover_weblinx_tasks(self, max_tasks: Optional[int] = None) -> List[TaskInfo]:
         """
-        Discover WebLINX tasks from benchmarks/weblinx/ directory.
-        
+        Discover WebLINX tasks from gym registry.
+
+        WebLINX tasks are registered as browsergym/weblinx.* after importing
+        the weblinx_browsergym module.
+
         Args:
             max_tasks: Maximum number of tasks to return (None for all)
-            
+
         Returns:
             List of discovered TaskInfo objects
         """
-        task_dir = self.benchmarks_root / "weblinx"
-        
-        if not task_dir.exists():
-            logger.warning(f"WebLINX dataset directory not found: {task_dir}")
+        tasks: List[TaskInfo] = []
+
+        # Import weblinx_browsergym to register tasks
+        try:
+            import weblinx_browsergym
+        except ImportError:
+            logger.warning("weblinx-browsergym not installed - run: pip install weblinx-browsergym")
             return []
-        
-        # TODO: Implement WebLINX task discovery
-        logger.info("WebLINX task discovery not yet implemented")
-        return []
+
+        # WebLINX tasks are registered as browsergym/weblinx.*
+        env_ids = [
+            env_id for env_id in gym.envs.registry.keys()
+            if env_id.startswith("browsergym/weblinx")
+        ]
+
+        if not env_ids:
+            logger.warning("WebLINX tasks not found in gym registry (browsergym/weblinx.*)")
+            return []
+
+        env_ids = sorted(env_ids)
+        for env_id in env_ids:
+            # env_id format: browsergym/weblinx.demo_id.step_num
+            task_suffix = env_id[len("browsergym/"):]
+            task_id = task_suffix  # weblinx.scicrdo.1
+            benchmark = task_id.split(".")[0]
+            name = ".".join(task_id.split(".")[1:]) if "." in task_id else task_id
+
+            tasks.append(TaskInfo(task_id=task_id, benchmark=benchmark, name=name))
+
+            if max_tasks and len(tasks) >= max_tasks:
+                break
+
+        logger.info(f"Discovered {len(tasks)} WebLINX tasks from gym registry")
+        return tasks
     
     def discover_benchmark_tasks(self, benchmark: str, max_tasks: Optional[int] = None) -> List[TaskInfo]:
         """

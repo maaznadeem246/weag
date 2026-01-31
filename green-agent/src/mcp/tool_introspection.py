@@ -102,18 +102,39 @@ class ToolMetadata:
     def format_for_agent(self) -> str:
         """
         Format tool as simple documentation: name + full docstring.
-        
+
         This follows the MCP/FastMCP pattern where tool.description contains
         the complete docstring with Args, Returns, Examples sections intact.
         """
         lines = [f"**{self.name}**"]
-        
-        # Use raw docstring if available, otherwise use parsed description
+
+        # Use raw docstring if available (for MCP base tools)
         if self.raw_docstring:
             lines.append(self.raw_docstring)
         else:
+            # For benchmark tools without raw docstring, build documentation from metadata
             lines.append(self.description)
-        
+
+            # Add Args section if parameters exist
+            if self.parameters:
+                lines.append("\nArgs:")
+                for param in self.parameters:
+                    required_text = "" if param.required else " (optional)"
+                    default_text = f", default={param.default}" if param.default is not None else ""
+                    param_desc = param.description if param.description else ""
+                    lines.append(f"    {param.name} ({param.type_hint}){required_text}{default_text}: {param_desc}")
+
+            # Add Returns section if available
+            if self.returns:
+                lines.append(f"\nReturns:")
+                lines.append(f"    {self.returns}")
+
+            # Add Examples if available
+            if self.examples:
+                lines.append("\nExamples:")
+                for example in self.examples:
+                    lines.append(f"    {example}")
+
         return "\n".join(lines)
 
 

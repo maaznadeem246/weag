@@ -513,7 +513,7 @@ class KickstartOrchestrator:
 
             # Per-agent env overrides from assessment config
             toml_env = _extract_agent_env(self._assessment_config, "green_agent")
-            logger.info(f"TOML env vars for green_agent: {toml_env}")
+            # logger.info(f"TOML env vars for green_agent: {toml_env}")
             env.update(toml_env)
             
             # Start subprocess (may fail if port in use - T059)
@@ -625,7 +625,7 @@ class KickstartOrchestrator:
                 # Fallback to purple_agent key (old structure)
                 env.update(_extract_agent_env(self._assessment_config, "purple_agent"))
             
-            logger.info(f"TOML env vars for purple_agent: PURPLE_LLM_PROVIDER={env.get('PURPLE_LLM_PROVIDER')}, PURPLE_OPENROUTER_API_KEY={bool(env.get('PURPLE_OPENROUTER_API_KEY'))}")
+            # logger.info(f"TOML env vars for purple_agent: PURPLE_LLM_PROVIDER={env.get('PURPLE_LLM_PROVIDER')}, PURPLE_OPENROUTER_API_KEY={bool(env.get('PURPLE_OPENROUTER_API_KEY'))}")
             
             # Add Langfuse credentials and trace context for unified tracing
             if os.environ.get("LANGFUSE_PUBLIC_KEY"):

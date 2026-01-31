@@ -80,6 +80,8 @@ class BenchmarkProfile:
     observation_mode: ObservationMode
     extra_tools: list[ToolDefinition] = field(default_factory=list)
     filtering_strategy: FilteringStrategy = field(default_factory=FilteringStrategy)
+    instructions: str = ""  # Benchmark-specific instructions for Purple Agent
+    start_url: str = ""  # Initial URL to open when browser starts
     
     def __post_init__(self):
         """Validate profile configuration."""
@@ -134,41 +136,7 @@ class BenchmarkProfileRegistry:
             display_name="WebArena",
             token_limit=5000,
             observation_mode=ObservationMode.AXTREE_FULL,
-            extra_tools=[
-                ToolDefinition(
-                    name="navigate_tabs",
-                    description="Switch between browser tabs",
-                    input_schema={
-                        "type": "object",
-                        "properties": {
-                            "tab_index": {"type": "integer", "description": "Target tab index (0-based)"}
-                        },
-                        "required": ["tab_index"],
-                    },
-                ),
-                ToolDefinition(
-                    name="fill_form",
-                    description="Fill a form with multiple fields at once",
-                    input_schema={
-                        "type": "object",
-                        "properties": {
-                            "fields": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "selector": {"type": "string"},
-                                        "value": {"type": "string"},
-                                    },
-                                    "required": ["selector", "value"],
-                                },
-                                "description": "List of field selectors and values to fill",
-                            }
-                        },
-                        "required": ["fields"],
-                    },
-                ),
-            ],
+            extra_tools=[],  # Base tools only
             filtering_strategy=FilteringStrategy(
                 focus_elements=["button", "input", "link", "select", "textarea", "form"],
                 exclude_elements=["script", "style", "meta", "noscript"],
@@ -184,36 +152,7 @@ class BenchmarkProfileRegistry:
             display_name="VisualWebArena",
             token_limit=3500,
             observation_mode=ObservationMode.AXTREE_WITH_SCREENSHOT,
-            extra_tools=[
-                ToolDefinition(
-                    name="get_screenshot",
-                    description="Capture current page screenshot",
-                    input_schema={
-                        "type": "object",
-                        "properties": {
-                            "full_page": {
-                                "type": "boolean",
-                                "default": False,
-                                "description": "Capture full page or viewport only",
-                            }
-                        },
-                    },
-                ),
-                ToolDefinition(
-                    name="identify_visual_element",
-                    description="Identify element by visual description",
-                    input_schema={
-                        "type": "object",
-                        "properties": {
-                            "description": {
-                                "type": "string",
-                                "description": "Visual description of the element to find",
-                            }
-                        },
-                        "required": ["description"],
-                    },
-                ),
-            ],
+            extra_tools=[],  # Base tools only
             filtering_strategy=FilteringStrategy(
                 focus_elements=["img", "button", "input", "link"],
                 exclude_elements=["script", "style", "meta"],
@@ -229,43 +168,7 @@ class BenchmarkProfileRegistry:
             display_name="WorkArena",
             token_limit=4500,
             observation_mode=ObservationMode.AXTREE,
-            extra_tools=[
-                ToolDefinition(
-                    name="fill_form",
-                    description="Fill a ServiceNow form with multiple fields",
-                    input_schema={
-                        "type": "object",
-                        "properties": {
-                            "fields": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "field_name": {"type": "string"},
-                                        "value": {"type": "string"},
-                                    },
-                                    "required": ["field_name", "value"],
-                                },
-                            }
-                        },
-                        "required": ["fields"],
-                    },
-                ),
-                ToolDefinition(
-                    name="submit_form",
-                    description="Submit the current form",
-                    input_schema={
-                        "type": "object",
-                        "properties": {
-                            "confirm": {
-                                "type": "boolean",
-                                "default": True,
-                                "description": "Whether to confirm submission dialogs",
-                            }
-                        },
-                    },
-                ),
-            ],
+            extra_tools=[],  # Base tools only
             filtering_strategy=FilteringStrategy(
                 focus_elements=["button", "input", "select", "textarea", "form", "label"],
                 exclude_elements=["script", "style", "meta", "noscript"],
@@ -281,40 +184,7 @@ class BenchmarkProfileRegistry:
             display_name="AssistantBench",
             token_limit=3000,
             observation_mode=ObservationMode.AXTREE,
-            extra_tools=[
-                ToolDefinition(
-                    name="submit_answer",
-                    description="Submit the final answer for the task",
-                    input_schema={
-                        "type": "object",
-                        "properties": {
-                            "answer": {
-                                "type": "string",
-                                "description": "The answer to submit",
-                            }
-                        },
-                        "required": ["answer"],
-                    },
-                ),
-                ToolDefinition(
-                    name="search_page",
-                    description="Search for text content within the current page",
-                    input_schema={
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "Search query text",
-                            },
-                            "case_sensitive": {
-                                "type": "boolean",
-                                "default": False,
-                            },
-                        },
-                        "required": ["query"],
-                    },
-                ),
-            ],
+            extra_tools=[],  # Base tools only
             filtering_strategy=FilteringStrategy(
                 focus_elements=["article", "main", "p", "h1", "h2", "h3", "span", "div"],
                 exclude_elements=["script", "style", "meta", "nav", "footer", "header"],
@@ -322,6 +192,12 @@ class BenchmarkProfileRegistry:
                 include_hidden=False,
                 form_focus=False,
             ),
+            instructions="""This benchmark focuses on information retrieval and question answering.
+- **IMPORTANT**: As your first action, navigate to https://duckduckgo.com/ using the goto action
+- Navigate web pages to find specific information
+- Use send_msg_to_user action to submit your final answer
+- Be precise and concise in your responses""",
+            start_url="",
         )
         
         # WebLINX - Dialogue-based navigation

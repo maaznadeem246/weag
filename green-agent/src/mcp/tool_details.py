@@ -158,20 +158,22 @@ def format_tools_documentation(
 ) -> str:
     """
     Format tool metadata as documentation for assessment.
-    
+
     Args:
         tools: List of ToolMetadata objects
-        benchmark_id: Optional benchmark ID for section headers
-        
+        benchmark_id: Optional benchmark ID for integrating allowed actions
+
     Returns:
         Formatted markdown documentation with tool names, descriptions, and arguments
     """
+    from src.benchmarks.action_extractor import build_benchmark_action_docs
+
     sections = ["## AVAILABLE MCP TOOLS\n"]
-    
+
     # Separate base and benchmark-specific tools
     base_tools = []
     benchmark_tools = []
-    
+
     # Only execute_actions and get_observation are exposed to Purple Agent
     # cleanup_environment is removed - Green Agent handles cleanup
     base_names = {"execute_actions", "get_observation"}
@@ -180,23 +182,30 @@ def format_tools_documentation(
             base_tools.append(tool)
         else:
             benchmark_tools.append(tool)
-    
+
     # Format base tools
     if base_tools:
         for tool in base_tools:
             sections.append(tool.format_for_agent())
+
+            # After execute_actions, insert the allowed actions for this benchmark
+            if tool.name == "execute_actions" and benchmark_id:
+                try:
+                    action_docs = build_benchmark_action_docs(benchmark_id)
+                    sections.append("")
+                    sections.append(action_docs)
+                except Exception as e:
+                    logger.warning(f"Failed to build action docs for {benchmark_id}: {e}")
+
             sections.append("")
-    
+
     # Format benchmark-specific tools
     if benchmark_tools:
-        header = f"### Benchmark-Specific Tools"
-        if benchmark_id:
-            header += f" ({benchmark_id})"
-        sections.append(f"\n{header}\n")
+        sections.append("\n### Benchmark-Specific Tools\n")
         for tool in benchmark_tools:
             sections.append(tool.format_for_agent())
             sections.append("")
-    
+
     return "\n".join(sections)
 
 
