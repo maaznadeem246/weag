@@ -62,6 +62,14 @@ cp sample.env .env
 
 ## Running Without Docker (Local Development)
 
+### 0. Download Local Datasets
+
+Run the dataset setup script once before local runs:
+
+```powershell
+python scripts/setup_local_datasets.py
+```
+
 ### 1. Install UV (Python Package Manager)
 
 This project uses [uv](https://docs.astral.sh/uv/) for fast, reliable dependency management.
@@ -101,6 +109,33 @@ python kickstart_assessment.py --config scenarios/browsergym/scenario-local.toml
 # Or run single task
 python kickstart_assessment.py --task miniwob.click-test
 ```
+
+**Important:** Install Green Agent packages (`uv sync` in green-agent) and activate its venv. When running commands from the repo root, prefer using the Green Agent Python directly:
+
+```powershell
+.\green-agent\.venv\Scripts\python.exe <command>
+```
+
+**Root-level examples (recommended):**
+
+```powershell
+.\green-agent\.venv\Scripts\python.exe kickstart_assessment.py --config scenarios/browsergym/scenario-local.toml
+.\green-agent\.venv\Scripts\python.exe kickstart_assessment.py --task weblinx.scicrdo.1 --output results.json
+```
+
+**Local (no Docker) — run with Python from the green-agent venv:**
+
+```powershell
+.\green-agent\.venv\Scripts\python.exe kickstart_assessment.py --config scenarios/browsergym/scenario-local.toml --visible
+```
+
+**Task-specific run (no Docker):**
+
+```powershell
+.\green-agent\.venv\Scripts\python.exe kickstart_assessment.py --task weblinx.scicrdo.1 --output results.json
+```
+
+> The same commands also work after Docker build/start (they will connect to the running containers).
 
 ### 3. View Logs
 
