@@ -5,6 +5,7 @@
 **🔗 AgentBeats Links:**
 - **Green Agent**: https://agentbeats.dev/maaznadeem246/weag-green
 - **Purple Agent**: https://agentbeats.dev/maaznadeem246/weag-purple
+- **Project Demo (Loom)**: https://www.loom.com/share/eba41cb621b24b0aa925b6a8f1ebb054
 
 ---
 

@@ -96,7 +96,7 @@ def create_evaluation_agent() -> Agent[AgentContext]:
     
     # Setup LLM client using abstraction layer (GREEN_ overrides allow per-agent config)
     llm_config = LLMConfig.from_env("GREEN_")
-    print(f"Using LLM provider:",llm_config)
+    # print(f"Using LLM provider:",llm_config)
     client, model, _ = setup_llm_client(llm_config, "GREEN_")
     
     # For OpenAI/Gemini, set the custom client as default
