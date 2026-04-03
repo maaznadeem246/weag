@@ -1,0 +1,19 @@
+// OSWorld Purple Agent — AgentBeats manifest
+// Used by the AgentBeats platform for agent discovery and orchestration.
+{
+  "name": "OSWorld Purple Agent",
+  "version": "0.1.0",
+  "description": "A2A purple agent for OSWorld computer use benchmark",
+  "host": "0.0.0.0",
+  "port": 8000,
+  "provider": "litellm",
+  "skills": [
+    {
+      "id": "osworld_task",
+      "name": "OSWorld Task Execution",
+      "description": "Executes computer use tasks on Ubuntu desktop via pyautogui actions",
+      "inputModes": ["text", "file", "data"],
+      "outputModes": ["text", "data"]
+    }
+  ]
+}

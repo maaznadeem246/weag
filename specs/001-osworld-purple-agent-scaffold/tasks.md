@@ -23,11 +23,11 @@ description: "Task list for OSWorld Purple Agent Initial Scaffold"
 **Purpose**: Create the `osworld-purple-agent/` directory tree, project config, and
 CI/deployment files so all subsequent story tasks have a home to land in.
 
-- [ ] T001 Create `osworld-purple-agent/` directory structure: `src/`, `tests/unit/`, `tests/contract/` per plan.md
-- [ ] T002 [P] Create `osworld-purple-agent/pyproject.toml` with Python 3.11+, a2a-sdk, openai-agents[litellm], uvicorn, pydantic, pytest dependencies
-- [ ] T003 [P] Create `osworld-purple-agent/.env.example` with all OSWORLD_ prefixed env vars documented per quickstart.md
-- [ ] T004 [P] Create `osworld-purple-agent/amber-manifest.json5` with defaults: host=0.0.0.0, port=8000, skill id=osworld_task, provider=litellm
-- [ ] T005 [P] Create `osworld-purple-agent/README.md` with project purpose, setup instructions, and env var table from quickstart.md
+- [x] T001 Create `osworld-purple-agent/` directory structure: `src/`, `tests/unit/`, `tests/contract/` per plan.md
+- [x] T002 [P] Create `osworld-purple-agent/pyproject.toml` with Python 3.11+, a2a-sdk, openai-agents[litellm], uvicorn, pydantic, pytest dependencies
+- [x] T003 [P] Create `osworld-purple-agent/.env.example` with all OSWORLD_ prefixed env vars documented per quickstart.md
+- [x] T004 [P] Create `osworld-purple-agent/amber-manifest.json5` with defaults: host=0.0.0.0, port=8000, skill id=osworld_task, provider=litellm
+- [x] T005 [P] Create `osworld-purple-agent/README.md` with project purpose, setup instructions, and env var table from quickstart.md
 
 ---
 
@@ -38,12 +38,12 @@ abstraction, and A2A message parsing. ALL story work depends on this phase.
 
 **⚠️ CRITICAL**: No user story implementation can begin until this phase is complete.
 
-- [ ] T006 Create `osworld-purple-agent/src/__init__.py` (empty package marker)
-- [ ] T007 Create `osworld-purple-agent/tests/__init__.py` and `tests/unit/__init__.py` and `tests/contract/__init__.py` (empty package markers)
-- [ ] T008 Create `osworld-purple-agent/src/config.py` — `OsworldConfig` class loading HOST, PORT, LOG_LEVEL, AGENT_NAME, AGENT_VERSION from env vars with defaults per data-model.md
-- [ ] T009 Create `osworld-purple-agent/src/llm_provider.py` — copy `purple-agent/src/llm_provider.py` verbatim and change env var prefix from `PURPLE_` to `OSWORLD_`; update default provider to `litellm` per clarification
-- [ ] T010 [P] Create `osworld-purple-agent/src/messenger.py` — `parse_step_message(message) -> StepMessage` extracting TextPart/DataPart/FilePart; `build_step_response(reasoning, actions) -> list[Part]` per contracts/a2a-messages.md
-- [ ] T011 [P] Add `StepMessage` and `StepResponse` dataclasses to `osworld-purple-agent/src/messenger.py` with field validation rules from data-model.md
+- [x] T006 Create `osworld-purple-agent/src/__init__.py` (empty package marker)
+- [x] T007 Create `osworld-purple-agent/tests/__init__.py` and `tests/unit/__init__.py` and `tests/contract/__init__.py` (empty package markers)
+- [x] T008 Create `osworld-purple-agent/src/config.py` — `OsworldConfig` class loading HOST, PORT, LOG_LEVEL, AGENT_NAME, AGENT_VERSION from env vars with defaults per data-model.md
+- [x] T009 Create `osworld-purple-agent/src/llm_provider.py` — copy `purple-agent/src/llm_provider.py` verbatim and change env var prefix from `PURPLE_` to `OSWORLD_`; update default provider to `litellm` per clarification
+- [x] T010 [P] Create `osworld-purple-agent/src/messenger.py` — `parse_step_message(message) -> StepMessage` extracting TextPart/DataPart/FilePart; `build_step_response(reasoning, actions) -> list[Part]` per contracts/a2a-messages.md
+- [x] T011 [P] Add `StepMessage` and `StepResponse` dataclasses to `osworld-purple-agent/src/messenger.py` with field validation rules from data-model.md
 
 **Checkpoint**: Foundation ready — config, LLM provider, and A2A message parsing are all in place
 
@@ -59,10 +59,10 @@ POST a step message and receive a response with a reasoning TextPart and `{"acti
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Create `osworld-purple-agent/src/agent.py` — `OsworldAgent` class with `run(step: StepMessage, history: list[dict]) -> StepResponse`; builds multimodal SDK input (text + image_url); calls `Runner.run()`; parses `actions` from output; catches all LLM exceptions and returns `FAIL` per FR-010
-- [ ] T013 [US1] Create `osworld-purple-agent/src/executor.py` — `OsworldAgentExecutor(AgentExecutor)` with `sessions: dict[str, list[dict]]` (in-memory history per FR-004); `execute(context, updater)` method: parse message → call agent → append to history → send response via TaskUpdater
-- [ ] T014 [US1] Create `osworld-purple-agent/src/server.py` — `AgentCard` with skill id `osworld_task`, `DefaultRequestHandler`, `A2AStarletteApplication`; `app` ASGI object; `main()` entry point calling `uvicorn.run()` with config from `OsworldConfig`
-- [ ] T015 [US1] Add `[project.scripts]` entry in `osworld-purple-agent/pyproject.toml`: `osworld-agent = "src.server:main"`
+- [x] T012 [US1] Create `osworld-purple-agent/src/agent.py` — `OsworldAgent` class with `run(step: StepMessage, history: list[dict]) -> StepResponse`; builds multimodal SDK input (text + image_url); calls `Runner.run()`; parses `actions` from output; catches all LLM exceptions and returns `FAIL` per FR-010
+- [x] T013 [US1] Create `osworld-purple-agent/src/executor.py` — `OsworldAgentExecutor(AgentExecutor)` with `sessions: dict[str, list[dict]]` (in-memory history per FR-004); `execute(context, updater)` method: parse message → call agent → append to history → send response via TaskUpdater
+- [x] T014 [US1] Create `osworld-purple-agent/src/server.py` — `AgentCard` with skill id `osworld_task`, `DefaultRequestHandler`, `A2AStarletteApplication`; `app` ASGI object; `main()` entry point calling `uvicorn.run()` with config from `OsworldConfig`
+- [x] T015 [US1] Add `[project.scripts]` entry in `osworld-purple-agent/pyproject.toml`: `osworld-agent = "src.server:main"`
 
 **Checkpoint**: User Story 1 fully functional — `python -m uvicorn src.server:app --port 8000` starts the agent, agent card is reachable, and a synthetic step message receives a valid response
 
@@ -78,9 +78,9 @@ making real API calls.
 
 ### Implementation for User Story 2
 
-- [ ] T016 [P] [US2] Update `osworld-purple-agent/src/agent.py` — wire `setup_llm_client(prefix="OSWORLD_")` at agent init; apply `set_default_openai_client()` for OpenAI/Gemini; pass `LitellmModel` directly as `Agent.model` for LiteLLM per research.md Decision 4
-- [ ] T017 [P] [US2] Add provider validation in `osworld-purple-agent/src/llm_provider.py` — invalid `LLM_PROVIDER` value falls back to `litellm` and logs WARNING; missing required API key raises `ValueError` with install instructions per data-model.md LLMProviderConfig error transitions
-- [ ] T018 [US2] Create `osworld-purple-agent/tests/unit/test_llm_provider.py` — unit tests for `LLMConfig.from_env()` with all three providers, missing key validation, and invalid provider fallback (no real API calls — mock env vars only)
+- [x] T016 [P] [US2] Update `osworld-purple-agent/src/agent.py` — wire `setup_llm_client(prefix="OSWORLD_")` at agent init; apply `set_default_openai_client()` for OpenAI/Gemini; pass `LitellmModel` directly as `Agent.model` for LiteLLM per research.md Decision 4
+- [x] T017 [P] [US2] Add provider validation in `osworld-purple-agent/src/llm_provider.py` — invalid `LLM_PROVIDER` value falls back to `litellm` and logs WARNING; missing required API key raises `ValueError` with install instructions per data-model.md LLMProviderConfig error transitions
+- [x] T018 [US2] Create `osworld-purple-agent/tests/unit/test_llm_provider.py` — unit tests for `LLMConfig.from_env()` with all three providers, missing key validation, and invalid provider fallback (no real API calls — mock env vars only)
 
 **Checkpoint**: User Story 2 complete — all three providers load correctly from env vars; unit tests pass; switching provider requires only an env var change
 
@@ -96,8 +96,8 @@ the agent; image is GHCR-pushable.
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] Create `osworld-purple-agent/Dockerfile` — `python:3.11-slim` base; WORKDIR `/app`; copy `pyproject.toml` + `src/`; `pip install -e .`; EXPOSE 8000; CMD `["python", "-m", "uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "8000"]`
-- [ ] T020 [P] [US3] Create `osworld-purple-agent/.dockerignore` — exclude `.venv/`, `__pycache__/`, `*.pyc`, `tests/`, `.env`, `.git/`
+- [x] T019 [US3] Create `osworld-purple-agent/Dockerfile` — `python:3.11-slim` base; WORKDIR `/app`; copy `pyproject.toml` + `src/`; `pip install -e .`; EXPOSE 8000; CMD `["python", "-m", "uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "8000"]`
+- [x] T020 [P] [US3] Create `osworld-purple-agent/.dockerignore` — exclude `.venv/`, `__pycache__/`, `*.pyc`, `tests/`, `.env`, `.git/`
 
 **Checkpoint**: User Story 3 complete — Docker image builds and runs; agent card accessible from host on port 8000
 
@@ -107,10 +107,10 @@ the agent; image is GHCR-pushable.
 
 **Purpose**: Contract tests, logging wiring, and final validation to ensure all FRs are met.
 
-- [ ] T021 [P] Create `osworld-purple-agent/tests/unit/test_messenger.py` — unit tests for `parse_step_message()`: valid 5-part message, missing screenshot (text-only fallback), empty instruction fallback, invalid base64 handling; tests for `build_step_response()`: valid actions list, FAIL fallback on empty
-- [ ] T022 [P] Create `osworld-purple-agent/tests/contract/test_a2a_schema.py` — validate agent card JSON schema (skill id, inputModes, outputModes); validate step response structure (TextPart + DataPart with `actions` list) per contracts/a2a-messages.md
-- [ ] T023 Add structured logging to `osworld-purple-agent/src/executor.py` — INFO: incoming step (instruction[:80], screenshot size in bytes, env_config); INFO: outgoing response (reasoning[:80], action count); DEBUG: full history length, step_count per FR-008 and Constitution Principle VI
-- [ ] T024 [P] Add logging configuration in `osworld-purple-agent/src/server.py` `main()` — `logging.basicConfig(level=config.log_level, format=config.log_format)` on startup per `OsworldConfig`
+- [x] T021 [P] Create `osworld-purple-agent/tests/unit/test_messenger.py` — unit tests for `parse_step_message()`: valid 5-part message, missing screenshot (text-only fallback), empty instruction fallback, invalid base64 handling; tests for `build_step_response()`: valid actions list, FAIL fallback on empty
+- [x] T022 [P] Create `osworld-purple-agent/tests/contract/test_a2a_schema.py` — validate agent card JSON schema (skill id, inputModes, outputModes); validate step response structure (TextPart + DataPart with `actions` list) per contracts/a2a-messages.md
+- [x] T023 Add structured logging to `osworld-purple-agent/src/executor.py` — INFO: incoming step (instruction[:80], screenshot size in bytes, env_config); INFO: outgoing response (reasoning[:80], action count); DEBUG: full history length, step_count per FR-008 and Constitution Principle VI
+- [x] T024 [P] Add logging configuration in `osworld-purple-agent/src/server.py` `main()` — `logging.basicConfig(level=config.log_level, format=config.log_format)` on startup per `OsworldConfig`
 
 ---
 
