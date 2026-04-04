@@ -2,16 +2,14 @@
 OsworldAgent — core LLM logic for the OSWorld Purple Agent.
 
 Receives a parsed StepMessage (instruction + optional screenshot + env config),
-runs one step of the OpenAI Agents SDK, and returns a StepResponse with
-reasoning text and a list of pyautogui action strings.
+runs one step of the OpenAI Agents SDK using output_type=StepResponse for
+structured outputs, and returns a (StepResponse, updated_history) tuple.
 
 LLM provider and model are configured entirely via environment variables
 (OSWORLD_ prefix) through setup_llm_client().
 """
 
-import json
 import logging
-import re
 from typing import Any, Optional
 
 from agents import Agent, Runner, set_default_openai_api, set_default_openai_client
@@ -21,51 +19,77 @@ from .messenger import StepMessage, StepResponse
 
 logger = logging.getLogger(__name__)
 
+# OSWorld-specific system prompt.
+# No JSON format instructions needed — output_type=StepResponse enforces the
+# schema automatically via the SDK's structured-outputs mechanism.
 _SYSTEM_PROMPT = """\
-You are a computer-use agent operating an Ubuntu desktop remotely via pyautogui.
+You are a computer-use agent controlling an Ubuntu 22.04 desktop (1920×1080 resolution).
+
 At each step you receive:
-  - A task instruction
-  - A screenshot of the current desktop (when available)
-  - Optional accessibility tree and terminal output
+  - A task instruction describing what to accomplish
+  - A screenshot of the current desktop state
+  - Optionally: an accessibility tree and/or terminal output for additional context
 
-Your job is to decide the next action(s) and explain your reasoning.
+## Available pyautogui Actions
 
-Return your response as JSON with exactly two fields:
-{
-  "reasoning": "<chain-of-thought explaining what you see and what you intend to do>",
-  "actions": ["<pyautogui expression>", ...]
-}
+Mouse:
+  pyautogui.click(x, y)                   # left-click at pixel (x, y)
+  pyautogui.doubleClick(x, y)             # double-click
+  pyautogui.rightClick(x, y)              # right-click (context menu)
+  pyautogui.moveTo(x, y)                  # move cursor without clicking
+  pyautogui.dragTo(x, y, duration=0.5)    # drag from current position to (x, y)
 
-Rules:
-- actions must be a non-empty JSON array of strings.
-- Each string is either a valid pyautogui Python expression (e.g. "pyautogui.click(150, 200)")
-  or one of the special strings: "WAIT", "DONE", "FAIL".
-- Use "DONE" when the task is fully completed.
-- Use "FAIL" if the task cannot be completed.
-- Use "WAIT" to pause and observe the next screenshot before acting.
-- Do NOT include markdown fences — output raw JSON only.
+Keyboard:
+  pyautogui.typewrite("text", interval=0.05)  # type a string character by character
+  pyautogui.hotkey("ctrl", "c")               # key combination (copy)
+  pyautogui.hotkey("alt", "F4")              # close window
+  pyautogui.press("enter")                    # single key press
+  pyautogui.press("tab")                      # Tab key
+  pyautogui.keyDown("shift"); pyautogui.keyUp("shift")  # hold/release key
+
+Scroll:
+  pyautogui.scroll(3)   # scroll up 3 clicks at current cursor position
+  pyautogui.scroll(-3)  # scroll down 3 clicks
+
+Wait:
+  import time; time.sleep(1.0)  # pause for 1 second
+
+## Special Commands
+Use ONE of these as the sole element in actions when appropriate:
+  WAIT  — more time is needed (loading, animation); wait for the next screenshot
+  DONE  — the task is fully and successfully completed (confirm visually)
+  FAIL  — the task cannot be completed (impossible request or unrecoverable error)
+
+## Strategy
+1. Study the screenshot carefully — identify the target element and its pixel coordinates.
+2. Prefer clicking visible UI elements over keyboard shortcuts when both work.
+3. Issue ONE action per step — you will see the result before deciding the next action.
+4. Use WAIT when a spinner, loading bar, or animation is visible.
+5. Use DONE only after visually confirming the task outcome in the screenshot.
+6. Use FAIL only as a last resort after exhausting all reasonable approaches.
+
+## Output Fields
+- reasoning: Your chain-of-thought — what you see, where the target is, why this action.
+- actions: A non-empty list of pyautogui expression strings (or WAIT/DONE/FAIL).
 """
 
 
 def _build_input(step: StepMessage, history: list[dict]) -> list[dict]:
     """
-    Build the message list for Runner.run().
+    Build the message list for Runner.run(), including full conversation history.
 
     Args:
         step: Parsed step message from the green agent.
-        history: Conversation history (list of {role, content} dicts).
+        history: Prior turns as returned by result.to_input_list() from the SDK.
 
     Returns:
-        Message list including all history plus current step.
+        Full message list: history + new user message with screenshot.
     """
     content: list[Any] = [{"type": "text", "text": step.instruction}]
 
     if step.accessibility_tree:
         content.append(
-            {
-                "type": "text",
-                "text": f"Accessibility tree:\n{step.accessibility_tree}",
-            }
+            {"type": "text", "text": f"Accessibility tree:\n{step.accessibility_tree}"}
         )
 
     if step.terminal:
@@ -77,84 +101,51 @@ def _build_input(step: StepMessage, history: list[dict]) -> list[dict]:
         content.append(
             {
                 "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{step.screenshot_b64}"},
+                "image_url": {
+                    "url": f"data:image/png;base64,{step.screenshot_b64}",
+                    "detail": "high",
+                },
             }
         )
 
-    # Combined history messages (already formatted) + new user message.
-    messages = list(history)
-    messages.append({"role": "user", "content": content})
-    return messages
-
-
-def _parse_actions(raw_output: str) -> tuple[str, list[str]]:
-    """
-    Extract reasoning and actions from raw LLM text output.
-
-    Tries to parse JSON from the output. Falls back to returning FAIL.
-
-    Args:
-        raw_output: Raw string returned by Runner.run().
-
-    Returns:
-        Tuple of (reasoning_text, actions_list).
-    """
-    # Strip markdown code fences if present.
-    cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", raw_output).strip()
-
-    try:
-        data = json.loads(cleaned)
-        reasoning = str(data.get("reasoning", ""))
-        actions = data.get("actions", [])
-        if not isinstance(actions, list) or not actions:
-            actions = ["FAIL"]
-        return reasoning, [str(a) for a in actions]
-    except (json.JSONDecodeError, ValueError):
-        # Try to extract an actions array by regex as last resort.
-        match = re.search(r'"actions"\s*:\s*(\[.*?\])', cleaned, re.DOTALL)
-        if match:
-            try:
-                actions = json.loads(match.group(1))
-                return cleaned, [str(a) for a in actions]
-            except (json.JSONDecodeError, ValueError):
-                pass
-        return cleaned, ["FAIL"]
+    return list(history) + [{"role": "user", "content": content}]
 
 
 class OsworldAgent:
     """
-    Stateless agent wrapper around the OpenAI Agents SDK.
+    Agent wrapper around the OpenAI Agents SDK using structured outputs.
 
-    Each call to run() performs one step: builds the SDK input, calls Runner.run(),
-    parses the JSON response, and returns a StepResponse.
-    History management is the caller's responsibility (executor.py).
+    Uses output_type=StepResponse so the SDK enforces the JSON schema via
+    structured outputs — no manual JSON parsing or regex fallback needed.
+
+    run() returns (StepResponse, updated_history) where updated_history is
+    result.to_input_list() — the caller should store this and pass it back
+    on the next invocation to maintain the full conversation trajectory.
     """
 
     def __init__(self, llm_config: Optional[LLMConfig] = None) -> None:
         """
-        Initialise the agent and wire up the LLM client.
+        Initialise the agent and wire up the LLM provider.
 
         Args:
             llm_config: Pre-built config, or None to load from OSWORLD_ env vars.
         """
         client, model, cfg = setup_llm_client(llm_config, prefix="OSWORLD_")
 
+        agent_kwargs: dict[str, Any] = dict(
+            name="OsworldPurpleAgent",
+            instructions=_SYSTEM_PROMPT,
+            output_type=StepResponse,
+        )
+
         if cfg.provider == LLMProvider.LITELLM:
-            # model is a LitellmModel instance — pass directly to Agent.model.
-            self._sdk_agent: Agent = Agent(
-                name="OsworldPurpleAgent",
-                instructions=_SYSTEM_PROMPT,
-                model=model,
-            )
+            # LitellmModel instance is passed directly as Agent.model.
+            self._sdk_agent: Agent = Agent(model=model, **agent_kwargs)
         else:
             # OpenAI / Gemini: configure the global default client.
             set_default_openai_api("chat_completions")
             set_default_openai_client(client)
-            self._sdk_agent = Agent(
-                name="OsworldPurpleAgent",
-                instructions=_SYSTEM_PROMPT,
-                model=str(model),
-            )
+            self._sdk_agent = Agent(model=str(model), **agent_kwargs)
 
         self._max_iterations: int = cfg.max_iterations
         logger.info(
@@ -163,18 +154,24 @@ class OsworldAgent:
             getattr(model, "model", model),
         )
 
-    async def run(self, step: StepMessage, history: list[dict]) -> StepResponse:
+    async def run(
+        self, step: StepMessage, history: list[dict]
+    ) -> tuple[StepResponse, list[dict]]:
         """
         Execute one evaluation step.
 
         Args:
             step: Parsed step message (instruction, screenshot, env_config, …).
-            history: Conversation history as a list of {role, content} dicts.
-                     Will NOT be mutated by this method.
+            history: Conversation history from the previous result.to_input_list()
+                     call, or [] for the first step.
 
         Returns:
-            StepResponse with reasoning text and actions list.
-            On any LLM error, returns a FAIL response with the error description.
+            (response, updated_history) where:
+              - response is a StepResponse with typed reasoning + actions.
+              - updated_history is result.to_input_list() — pass this back on
+                the next call to maintain the full trajectory.
+            On LLM error, returns a FAIL StepResponse and the input messages
+            list (so history is still usable on the next step).
         """
         messages = _build_input(step, history)
 
@@ -184,14 +181,17 @@ class OsworldAgent:
                 input=messages,
                 max_turns=self._max_iterations,
             )
-            raw_output = result.final_output or ""
-            reasoning, actions = _parse_actions(str(raw_output))
-            return StepResponse(reasoning=reasoning, actions=actions)
+            response: StepResponse = result.final_output
+            # Guard: SDK structured output should always return actions, but
+            # if the model returns an empty list, default to FAIL.
+            if not response.actions:
+                response = StepResponse(reasoning=response.reasoning, actions=["FAIL"])
+            return response, result.to_input_list()
 
         except Exception as exc:
             error_msg = f"LLM call failed: {type(exc).__name__}: {exc}"
             logger.error("OsworldAgent.run error: %s", error_msg, exc_info=True)
-            return StepResponse(reasoning=error_msg, actions=["FAIL"])
+            return StepResponse(reasoning=error_msg, actions=["FAIL"]), messages
 
 
 __all__ = ["OsworldAgent"]

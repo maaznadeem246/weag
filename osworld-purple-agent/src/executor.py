@@ -76,7 +76,10 @@ class OsworldAgentExecutor(AgentExecutor):
         )
 
         # --- Run agent ---
-        response = await self._agent.run(step, history)
+        # agent.run() returns (StepResponse, updated_history) where updated_history
+        # is result.to_input_list() — the SDK-idiomatic way to carry history forward.
+        response, new_history = await self._agent.run(step, history)
+        self._sessions[context_id] = new_history
 
         logger.info(
             "Step response — context=%s reasoning=%.80r action_count=%d",
@@ -86,33 +89,8 @@ class OsworldAgentExecutor(AgentExecutor):
         )
         logger.debug(
             "Full history length after step: %d messages, context=%s",
-            len(history) + 2,
+            len(new_history),
             context_id,
-        )
-
-        # --- Update history ---
-        image_content = []
-        if step.screenshot_b64:
-            image_content = [
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{step.screenshot_b64}"
-                    },
-                }
-            ]
-        history.append(
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": step.instruction}]
-                + image_content,
-            }
-        )
-        history.append(
-            {
-                "role": "assistant",
-                "content": response.reasoning,
-            }
         )
 
         # --- Send response ---
